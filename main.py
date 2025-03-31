@@ -138,9 +138,9 @@ class TextCorrectionTool:
         self.text_correction_tab = tk.Frame(self.notebook)
         self.notebook.add(self.text_correction_tab, text="文字修正")
         
-        # 創建筆記標籤頁
+        # 創建代辦事項標籤頁
         self.notes_tab = tk.Frame(self.notebook)
-        self.notebook.add(self.notes_tab, text="筆記")
+        self.notebook.add(self.notes_tab, text="代辦事項")
         
         # 文字處理區域框架 (900x450) - 放在文字修正標籤頁中
         text_frame = tk.Frame(self.text_correction_tab, width=900, height=450)
