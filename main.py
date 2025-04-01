@@ -156,7 +156,7 @@ class TextCorrectionTool:
         self.toolbar_top_frame = tk.Frame(self.toolbar_main_frame)
         self.toolbar_top_frame.pack(side=tk.TOP, fill=tk.X)
 
-        # 工具欄按鈕
+        # 工具欄按鈕 (上層)
         self.undo_button = tk.Button(self.toolbar_top_frame, text="還原上一步", command=self.undo_last_action)
         self.undo_button.pack(side=tk.LEFT, padx=2, pady=2)
 
@@ -166,10 +166,22 @@ class TextCorrectionTool:
         self.add_shortcut_button = tk.Button(self.toolbar_top_frame, text="新增快捷字", command=self.add_shortcut) # Placeholder command
         self.add_shortcut_button.pack(side=tk.LEFT, padx=2, pady=2)
 
-        # 工具欄下層 (預留)
+        # 工具欄下層
         self.toolbar_bottom_frame = tk.Frame(self.toolbar_main_frame)
         self.toolbar_bottom_frame.pack(side=tk.TOP, fill=tk.X)
-        # tk.Label(self.toolbar_bottom_frame, text="下層預留").pack() # 測試用
+
+        # 工具欄按鈕 (下層 - 快捷字/符號)
+        shortcuts = ["，", "。", "「」", "『』", "民國(下同)", "新臺幣(下同)"]
+        for sc in shortcuts:
+            # Handle quotes needing cursor placement inside
+            if sc == "「」" or sc == "『』":
+                btn = tk.Button(self.toolbar_bottom_frame, text=sc,
+                                command=lambda s=sc: self.insert_text_at_cursor(s, move_cursor=True))
+            else:
+                btn = tk.Button(self.toolbar_bottom_frame, text=sc,
+                                command=lambda s=sc: self.insert_text_at_cursor(s))
+            btn.pack(side=tk.LEFT, padx=2, pady=2)
+
 
         # --- 圖片顯示區域框架 (Pack at the bottom) ---
         self.image_frame = tk.Frame(self.text_correction_tab, height=120, bg="white") # Fixed height
@@ -246,10 +258,218 @@ class TextCorrectionTool:
         except tk.TclError:
             self.status_bar.config(text="沒有可還原的操作")
 
+ # --- 修改：實作 add_shortcut ---
     def add_shortcut(self):
-        """新增快捷字 (佔位符)"""
-        messagebox.showinfo("提示", "新增快捷字功能尚未實作")
-        print("新增快捷字按鈕被點擊")
+        """新增快捷字: 跳出輸入視窗，將輸入文字變成新按鈕加到工具欄下層"""
+        shortcut_text = simpledialog.askstring(
+            "新增快捷字",
+            "請輸入要新增的快捷字:",
+            parent=self.root  # Make the dialog modal to the main window
+        )
+
+        if shortcut_text:  # Check if the user entered text (didn't cancel)
+            shortcut_text = shortcut_text.strip() # Remove leading/trailing whitespace
+            if shortcut_text: # Check again after stripping to ensure it's not just whitespace
+                try:
+                    # --- Create the new button ---
+                    # IMPORTANT: Use lambda s=shortcut_text: ...
+                    # This captures the *current* value of shortcut_text for this specific button's command.
+                    # If you just used lambda: self.insert_text_at_cursor(shortcut_text),
+                    # all dynamically created buttons would insert the *last* added shortcut text.
+                    new_button = tk.Button(
+                        self.toolbar_bottom_frame,
+                        text=shortcut_text,
+                        command=lambda s=shortcut_text: self.insert_text_at_cursor(s)
+                    )
+
+                    # --- Pack the new button ---
+                    # It will automatically appear to the right of existing buttons packed with side=tk.LEFT
+                    new_button.pack(side=tk.LEFT, padx=2, pady=2)
+
+                    # --- Apply the current theme to the new button ---
+                    # We need to ensure new buttons also follow the theme.
+                    self.apply_theme_to_widget(new_button) # 使用輔助函數套用主題
+
+                    self.status_bar.config(text=f"已新增快捷字: {shortcut_text}")
+                    print(f"新增快捷字: {shortcut_text}")
+
+                except Exception as e:
+                    error_msg = f"無法新增快捷按鈕: {str(e)}"
+                    self.log_error("Shortcut Error", error_msg, traceback.format_exc()) # 使用您的錯誤記錄
+            else:
+                 # User entered only whitespace
+                 messagebox.showwarning("提示", "快捷字不能為空或僅包含空白字符。", parent=self.root)
+        # else: User cancelled the dialog, do nothing.
+
+    # --- 新增：套用主題到單一元件的輔助函數 ---
+    def apply_theme_to_widget(self, widget):
+         """Apply the current theme to a specific widget."""
+         if not hasattr(self, 'settings') or not widget: # Safety check
+             return
+
+         # Determine colors based on theme
+         if self.settings["dark_mode"]:
+             bg_color = "#2b2b2b" # 背景色
+             fg_color = "white" # 前景色 (文字)
+             button_bg = "#3c3f41" # 按鈕背景
+             button_fg = "white" # 按鈕文字
+             # Add more specific colors if needed
+         else:
+             # 使用系統預設顏色以獲得更好的外觀整合
+             bg_color = "SystemButtonFace" # 主背景色
+             fg_color = "black" # 前景色
+             button_bg = "SystemButtonFace" # 按鈕背景
+             button_fg = "black" # 按鈕文字
+             # Add more specific colors if needed
+
+         # Apply theme based on widget type (expand as needed)
+         widget_type = widget.winfo_class() # 獲取元件類型 (例如 'Button', 'Label', 'Frame')
+
+         try:
+             if widget_type == 'Button':
+                 widget.configure(bg=button_bg, fg=button_fg)
+             elif widget_type == 'Label':
+                 # 確保標籤背景與其容器一致
+                 # Frame 的背景色通常是 bg_color，所以標籤也用 bg_color
+                  widget.configure(bg=bg_color, fg=fg_color)
+             elif widget_type == 'Frame':
+                 widget.configure(bg=bg_color) # Frame 本身使用主背景色
+             elif widget_type == 'Canvas': # 例如圖片區的 Canvas
+                 # Canvas 的背景可能需要特別設定 (例如淺色模式下的白色)
+                 canvas_bg = "white" if not self.settings["dark_mode"] else "#2b2b2b"
+                 widget.configure(bg=canvas_bg)
+             # Add other common widget types if necessary
+         except tk.TclError:
+              # Widget might already be destroyed, ignore error
+              pass
+
+    # --- 修改：更新 apply_theme 以使用輔助函數並涵蓋更多元件 ---
+    def apply_theme(self):
+        """應用主題設定"""
+        if self.settings["dark_mode"]:
+            # 深色模式
+            bg_color = "#2b2b2b"
+            fg_color = "white"
+            text_bg = "#2b2b2b" # 文字區域背景
+            text_fg = "white" # 文字區域文字
+            button_bg = "#3c3f41"
+            button_fg = "white"
+            canvas_bg = "#2b2b2b" # Canvas 背景 (圖片區)
+            toolbar_bg = "#3c3f41" # 工具列背景
+            img_container_bg = "#2b2b2b" # 圖片容器 Frame 背景
+            cursor_color = "white" # 文字區域游標顏色
+            notebook_bg = "#2b2b2b" # Notebook 背景
+            tab_bg = "#3c3f41" # Tab 背景
+            selected_tab_bg = "#4f5254" # 選中 Tab 背景 (可調整)
+        else:
+            # 淺色模式 (使用系統預設)
+            bg_color = "SystemButtonFace"
+            fg_color = "black"
+            text_bg = "white"
+            text_fg = "black"
+            button_bg = "SystemButtonFace"
+            button_fg = "black"
+            canvas_bg = "white"
+            toolbar_bg = "SystemButtonFace"
+            img_container_bg = "white"
+            cursor_color = "black"
+            notebook_bg = "SystemButtonFace"
+            tab_bg = "SystemButtonFace"
+            selected_tab_bg = "SystemHighlight" # 使用系統高亮色 (或自訂淺灰色)
+
+
+        # 應用主題到主視窗
+        self.root.configure(bg=bg_color)
+
+        # 應用主題到文字區域
+        # 使用 insertbackground 讓游標在深色模式下可見
+        self.text_area.configure(bg=text_bg, fg=text_fg, insertbackground=cursor_color)
+
+        # 應用主題到圖片區域 Frame
+        self.image_frame.configure(bg=bg_color)
+        # 套用主題到 Canvas 本身
+        self.image_canvas.configure(bg=canvas_bg)
+        # 套用主題到 Canvas *內部* 的容器 Frame
+        self.image_container.configure(bg=img_container_bg)
+        # 套用主題到容器內的圖片標籤 (假設它們是 Label)
+        for child in self.image_container.winfo_children():
+             self.apply_theme_to_widget(child) # 使用輔助函數
+
+        # 應用主題到圖片下載按鈕框架及其按鈕
+        img_button_frame = None
+        # 穩健地找到包含下載/路徑按鈕的框架
+        # (假設它被 pack 在 image_frame 的右側)
+        for widget in self.image_frame.winfo_children():
+            if isinstance(widget, tk.Frame) and widget.winfo_manager() == 'pack':
+                pack_info = widget.pack_info()
+                if 'side' in pack_info and pack_info['side'] == tk.RIGHT:
+                    img_button_frame = widget
+                    break
+
+        if img_button_frame:
+             img_button_frame.configure(bg=bg_color) # 設定框架本身的背景
+             for child in img_button_frame.winfo_children():
+                 self.apply_theme_to_widget(child) # 設定內部按鈕的主題
+
+
+        # 應用主題到狀態欄
+        self.status_bar.configure(bg=bg_color, fg=fg_color)
+
+        # 應用主題到工具欄 (使用輔助函數以保持一致性)
+        if hasattr(self, 'toolbar_main_frame'):
+            self.toolbar_main_frame.configure(bg=toolbar_bg)
+            self.toolbar_top_frame.configure(bg=toolbar_bg)
+            self.toolbar_bottom_frame.configure(bg=toolbar_bg)
+            # 套用主題到兩個工具列的所有子元件
+            for child in self.toolbar_top_frame.winfo_children():
+                self.apply_theme_to_widget(child)
+            for child in self.toolbar_bottom_frame.winfo_children(): # 包括動態新增的按鈕
+                self.apply_theme_to_widget(child)
+
+        # 應用主題到 Notebook 標籤頁 (使用 ttk.Style)
+        style = ttk.Style()
+        # 設定 Notebook 元件本身的背景 (標籤周圍的區域)
+        style.configure("TNotebook", background=bg_color)
+        # 設定 Notebook 內部頁面 (Frame) 的背景
+        style.configure("TFrame", background=bg_color) # 確保 Tab 內的 Frame 背景也套用
+        # 設定 Tab 的樣式
+        style.configure("TNotebook.Tab",
+                        background=tab_bg,         # 未選中 Tab 的背景
+                        foreground=fg_color,       # 未選中 Tab 的文字顏色
+                        padding=[5, 2]             # 增加一些內邊距
+                       )
+        # 設定選中和活動狀態下 Tab 的樣式
+        style.map("TNotebook.Tab",
+                  background=[("selected", selected_tab_bg)], # 選中 Tab 的背景
+                  foreground=[("selected", fg_color)]        # 選中 Tab 的文字顏色
+                 )
+
+        # 應用主題到標籤頁內部的 Frame (確保它們有背景色)
+        self.text_correction_tab.configure(bg=bg_color)
+        self.notes_tab.configure(bg=bg_color)
+        # 套用主題到 notes_tab 內的元件 (如果有)
+        for child in self.notes_tab.winfo_children():
+             self.apply_theme_to_widget(child) # 例如: 套用到標籤頁內部的 Frame
+
+    def insert_text_at_cursor(self, text_to_insert, move_cursor=False):
+        """在目前游標位置插入文字"""
+        try:
+            insert_index = self.text_area.index(tk.INSERT)
+            self.text_area.insert(insert_index, text_to_insert)
+            if move_cursor and len(text_to_insert) > 1:
+                # Move cursor back one position (typically for quotes)
+                # Calculate the new index based on the inserted text length
+                line, col = map(int, str(insert_index).split('.'))
+                new_col = col + len(text_to_insert) - 1
+                new_index = f"{line}.{new_col}"
+                self.text_area.mark_set(tk.INSERT, new_index)
+            self.text_area.focus_set() # Keep focus on text area
+            # Manually trigger Modified event for undo stack if needed
+            self.text_area.edit_modified(True)
+        except Exception as e:
+            print(f"插入文字時出錯: {e}")
+            self.status_bar.config(text=f"插入文字時出錯: {e}")
+
 
     def on_image_container_configure(self, event):
         """當圖片容器大小變化時，更新畫布的滾動區域"""
