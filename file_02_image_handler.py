@@ -178,10 +178,14 @@ def download_images(self):
         # 確保下載路徑存在
         os.makedirs(self.download_path, exist_ok=True)
         
+        # 獲取當前時間作為檔案名稱的一部分
+        import datetime
+        current_time = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        
         # 下載所有圖片
         for i, image in enumerate(self.images):
-            # 生成檔案名稱
-            file_name = f"image_{i + 1}.png"
+            # 生成檔案名稱：image_時間_數字
+            file_name = f"image_{current_time}_{i + 1}.png"
             file_path = os.path.join(self.download_path, file_name)
             
             # 儲存圖片

@@ -145,3 +145,98 @@ def _update_text_area(self, corrected_text, corrections=None):
             start_index = f"{start_line}.{start_col}"
             end_index = f"{end_line}.{end_col}"
             self.text_area.tag_add("corrected", start_index, end_index)
+
+def correct_text_for_word_import(self, text):
+    """專門用於 Word 檔案導入時的文字校正處理
+    
+    參數:
+        text: 從 Word 檔案導入的原始文字
+        
+    回傳:
+        校正後的文字
+    """
+    try:
+        # 更新狀態欄
+        self.status_bar.config(text="正在進行文字校正...")
+        
+        # 進行基本文字修正
+        corrected_text = correct_common_errors(text)
+        
+        # 檢查簡體字並根據 protected_words.json 進行轉換
+        from config_02_protected_words import check_simplified_chinese
+        final_text = check_simplified_chinese(self, corrected_text)
+        
+        # 更新狀態欄
+        self.status_bar.config(text="文字校正完成")
+        
+        return final_text
+        
+    except Exception as e:
+        error_msg = f"Word 文件文字校正時發生錯誤: {str(e)}"
+        
+        # 記錄錯誤
+        from utils_01_error_handler import log_error
+        log_error(self, "Text Correction Error", error_msg, traceback.format_exc())
+        
+        # 如果校正失敗，返回原始文字
+        return text
+
+def correct_common_errors(text):
+    """進行常見文字錯誤的修正
+    
+    參數:
+        text: 要修正的文字
+        
+    回傳:
+        修正後的文字
+    """
+    if not text:
+        return text
+        
+    # 建立修正規則
+    corrections = {
+        # 標點符號修正
+        '，,': '，',
+        ',.': '。',
+        '。.': '。',
+        ',.': '。',
+        '..': '。',
+        '。。': '。',
+        ',,': '，',
+        '，，': '，',
+        
+        # 空格修正
+        '  ': ' ',  # 雙空格改為單空格
+        
+        # 常見錯字修正
+        '的的': '的',
+        '了了': '了',
+        '是是': '是',
+        '和和': '和',
+    }
+    
+    # 應用修正規則
+    corrected_text = text
+    for error, correction in corrections.items():
+        corrected_text = corrected_text.replace(error, correction)
+    
+    # 移除行尾的"/"符號（可能是Word文件轉換時產生的）
+    corrected_text = corrected_text.replace('/\n', '\n')
+    corrected_text = corrected_text.replace('/ \n', '\n')
+    
+    # 如果文字最後以"/"結尾，移除它
+    if corrected_text.endswith('/'):
+        corrected_text = corrected_text[:-1]
+    
+    # 處理行首行尾空格，但保留換行格式
+    lines = corrected_text.split('\n')
+    cleaned_lines = []
+    for line in lines:
+        # 只清理行首和行尾的空格，保留行中間的空格和格式
+        cleaned_line = line.strip()
+        cleaned_lines.append(cleaned_line)
+    
+    # 使用原始的換行符重新組合文字，確保換行被保留
+    corrected_text = '\n'.join(cleaned_lines)
+    
+    return corrected_text

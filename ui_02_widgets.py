@@ -12,6 +12,7 @@ import traceback
 import logging
 import platform
 from pathlib import Path
+import msoffcrypto
 
 # 導入自定義模組
 from utils_01_error_handler import setup_error_logging, log_error
@@ -19,7 +20,7 @@ from config_01_settings import load_settings, save_settings
 from config_02_protected_words import load_protected_words, save_protected_words, manage_protected_words
 from text_01_correction import correct_text_thread, find_differences
 from text_02_formatting import adjust_indentation, adjust_text_formatting
-from file_01_word_processor import load_and_display_word_content, parse_word_document_com
+from file_01_word_processor import load_and_display_word_content, parse_word_document_com, handle_password_protected_file
 from file_02_image_handler import extract_images_from_docx, display_image, show_full_image, clear_images, download_images, choose_download_path
 from utils_02_shortcuts import create_shortcut_button, load_custom_shortcut_buttons
 
@@ -346,6 +347,27 @@ class TextCorrectionTool:
         # 根據檔案類型處理
         file_ext = os.path.splitext(file_path)[1].lower()
         if file_ext in ['.docx', '.doc']:
+            # 更新狀態欄，提示使用者正在開啟檔案
+            self.status_bar.config(text=f"正在開啟 Word 檔案: {os.path.basename(file_path)}...")
+            
+            # 嘗試檢測檔案是否加密
+            try:
+                with open(file_path, 'rb') as file:
+                    try:
+                        ms_file = msoffcrypto.OfficeFile(file)
+                        if ms_file.is_encrypted():
+                            # 如果檔案已加密，調用處理加密檔案的函數
+                            handle_password_protected_file(self, file_path)
+                            return
+                    except Exception as e:
+                        # 如果檢測加密狀態失敗，嘗試正常載入
+                        pass
+            except Exception as e:
+                # 如果打開檔案失敗，顯示錯誤訊息
+                messagebox.showerror("錯誤", f"無法開啟檔案: {str(e)}")
+                return
+                
+            # 如果檔案未加密或無法確定加密狀態，嘗試正常載入
             self.load_and_display_word_content(file_path)
         else:
             messagebox.showinfo("提示", f"不支援的檔案類型: {file_ext}\n目前僅支援 .docx 和 .doc 檔案")

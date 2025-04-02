@@ -68,13 +68,18 @@ def open_text_settings(self):
     # 創建設定視窗
     settings_window = tk.Toplevel(self.root)
     settings_window.title("文字格式設定")
-    settings_window.geometry("400x300")
+    settings_window.geometry("450x500")  # 增加視窗大小，確保有足夠空間
     settings_window.resizable(False, False)
     settings_window.transient(self.root)  # 設置為主窗口的子窗口
     
+    # 主框架 - 使用 grid 佈局管理器
+    main_frame = tk.Frame(settings_window)
+    main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    main_frame.grid_columnconfigure(0, weight=1)
+    
     # 字型設定框架
-    font_frame = tk.LabelFrame(settings_window, text="字型設定")
-    font_frame.pack(fill=tk.X, padx=10, pady=10)
+    font_frame = tk.LabelFrame(main_frame, text="字型設定")
+    font_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
     
     # 字型家族
     tk.Label(font_frame, text="字型:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
@@ -91,8 +96,8 @@ def open_text_settings(self):
     font_size_combo.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
     
     # 行距設定框架
-    spacing_frame = tk.LabelFrame(settings_window, text="行距設定")
-    spacing_frame.pack(fill=tk.X, padx=10, pady=10)
+    spacing_frame = tk.LabelFrame(main_frame, text="行距設定")
+    spacing_frame.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
     
     # 段落內行距
     tk.Label(spacing_frame, text="段落內行距:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
@@ -101,14 +106,37 @@ def open_text_settings(self):
     line_spacing_combo['values'] = (0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 14, 16)
     line_spacing_combo.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
     
-    # 預覽框架
-    preview_frame = tk.LabelFrame(settings_window, text="預覽")
-    preview_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    # 預覽框架 - 獨立顯示區域
+    preview_frame = tk.LabelFrame(main_frame, text="預覽")
+    preview_frame.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
+    preview_frame.grid_columnconfigure(0, weight=1)
+    preview_frame.grid_rowconfigure(0, weight=1)
+    
+    # 創建固定高度的預覽容器，避免影響其他元素
+    preview_container = tk.Frame(preview_frame, height=150)
+    preview_container.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+    preview_container.grid_propagate(False)  # 防止內容改變框架大小
+    preview_container.grid_columnconfigure(0, weight=1)
+    preview_container.grid_rowconfigure(0, weight=1)
+    
+    # 創建文字區域和滾動條的框架
+    text_scroll_frame = tk.Frame(preview_container)
+    text_scroll_frame.grid(row=0, column=0, sticky="nsew")
+    text_scroll_frame.grid_columnconfigure(0, weight=1)
+    text_scroll_frame.grid_rowconfigure(0, weight=1)
+    
+    # 添加垂直滾動條
+    preview_scrollbar = tk.Scrollbar(text_scroll_frame)
+    preview_scrollbar.grid(row=0, column=1, sticky="ns")
     
     # 預覽文字區域
-    preview_text = tk.Text(preview_frame, height=5, width=40, wrap=tk.WORD)
-    preview_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-    preview_text.insert("1.0", "這是預覽文字，用來展示字型和行距設定的效果。\n這是第二行文字。")
+    preview_text = tk.Text(text_scroll_frame, wrap=tk.WORD, 
+                          yscrollcommand=preview_scrollbar.set)
+    preview_text.grid(row=0, column=0, sticky="nsew")
+    preview_scrollbar.config(command=preview_text.yview)
+    
+    # 設置預覽文字
+    preview_text.insert("1.0", "這是預覽文字，用來展示字型和行距設定的效果。\n這是第二行文字。\n\n調整字型和行距後，可以在此區域查看效果。\n如果文字超出顯示範圍，可以使用滾動條查看。")
     
     # 更新預覽的函數
     def update_preview(*args):
@@ -134,12 +162,13 @@ def open_text_settings(self):
     # 初始更新預覽
     update_preview()
     
-    # 按鈕框架
-    button_frame = tk.Frame(settings_window)
-    button_frame.pack(fill=tk.X, padx=10, pady=10)
+    # 按鈕框架 - 固定在底部
+    button_frame = tk.Frame(main_frame)
+    button_frame.grid(row=3, column=0, sticky="ew", padx=5, pady=10)
+    button_frame.grid_columnconfigure(1, weight=1)  # 讓確定按鈕靠右
     
-    # 儲存按鈕
-    def save_settings():
+    # 確定按鈕
+    def apply_settings():
         try:
             # 更新設定
             self.settings["font_family"] = font_family_var.get()
@@ -169,12 +198,13 @@ def open_text_settings(self):
             from utils_01_error_handler import log_error
             log_error(self, "Settings Save Error", error_msg, traceback.format_exc())
     
-    save_button = tk.Button(button_frame, text="儲存", command=save_settings, width=10)
-    save_button.pack(side=tk.RIGHT, padx=5)
-    
-    # 取消按鈕
+    # 取消按鈕 - 靠左
     cancel_button = tk.Button(button_frame, text="取消", command=settings_window.destroy, width=10)
-    cancel_button.pack(side=tk.RIGHT, padx=5)
+    cancel_button.grid(row=0, column=0, padx=5, pady=5)
+    
+    # 確定按鈕 - 靠右
+    ok_button = tk.Button(button_frame, text="確定", command=apply_settings, width=10)
+    ok_button.grid(row=0, column=1, padx=5, pady=5, sticky="e")
 
 def toggle_dark_mode(self):
     """切換深色模式"""

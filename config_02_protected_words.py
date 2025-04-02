@@ -186,3 +186,67 @@ def manage_protected_words(self):
     
     # 設置焦點
     word_entry.focus_set()
+
+def check_simplified_chinese(self, text):
+    """檢查文字中的簡體字並根據保護詞彙表進行轉換
+    
+    參數:
+        text: 要檢查的文字
+        
+    回傳:
+        轉換後的文字
+    """
+    try:
+        # 檢查是否有轉換器
+        if not hasattr(self, 'converter') or not self.converter:
+            # 嘗試初始化轉換器
+            try:
+                import opencc
+                self.converter = opencc.OpenCC('s2t')  # 將簡體字轉為繁體字
+            except Exception as e:
+                error_msg = f"無法初始化OpenCC轉換器: {str(e)}"
+                messagebox.showerror("錯誤", error_msg)
+                
+                # 記錄錯誤
+                from utils_01_error_handler import log_error
+                log_error(self, "OpenCC Init Error", error_msg, traceback.format_exc())
+                
+                # 如果無法初始化轉換器，直接返回原文
+                return text
+        
+        # 載入保護詞彙表
+        protected_words = load_protected_words()
+        
+        # 先使用 OpenCC 進行簡繁轉換
+        converted_text = self.converter.convert(text)
+        
+        # 檢查保護詞彙表中的詞彙，確保它們不被錯誤轉換
+        for word in protected_words:
+            # 如果保護詞彙在原文中存在，但在轉換後的文字中不存在，則恢復該詞彙
+            if word in text and word not in converted_text:
+                # 找出該詞彙在原文中的所有位置
+                start_pos = 0
+                while True:
+                    pos = text.find(word, start_pos)
+                    if pos == -1:
+                        break
+                    
+                    # 計算該詞彙在轉換後文字中的對應位置
+                    # 這裡假設字符數量不變，可能需要更複雜的邏輯來處理實際情況
+                    converted_text = converted_text[:pos] + word + converted_text[pos + len(word):]
+                    
+                    # 更新下一次搜索的起始位置
+                    start_pos = pos + len(word)
+        
+        return converted_text
+        
+    except Exception as e:
+        error_msg = f"檢查簡體字時發生錯誤: {str(e)}"
+        messagebox.showerror("錯誤", error_msg)
+        
+        # 記錄錯誤
+        from utils_01_error_handler import log_error
+        log_error(self, "Simplified Chinese Check Error", error_msg, traceback.format_exc())
+        
+        # 如果發生錯誤，返回原文
+        return text

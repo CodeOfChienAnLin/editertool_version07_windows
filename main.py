@@ -17,6 +17,7 @@ import traceback
 import logging
 import platform # 用於檢查操作系統
 from pathlib import Path # --- 將 Path 導入移到這裡 ---
+import re
 
 # --- COM 相關匯入和檢查 (用於 Windows + Word 解析) ---
 HAS_PYWIN32 = False
@@ -917,7 +918,44 @@ class TextCorrectionTool:
         paragraphs = []
         for para in doc.paragraphs:
             if para.text.strip():  # 忽略空段落
-                paragraphs.append(para.text)
+                # 處理段落的縮排和編號
+                indent_level = 0
+                # 嘗試獲取段落的縮排級別
+                try:
+                    if hasattr(para, 'paragraph_format') and hasattr(para.paragraph_format, 'left_indent'):
+                        if para.paragraph_format.left_indent:
+                            # 估算縮排級別
+                            indent_level = int(para.paragraph_format.left_indent.pt / 18)
+                except:
+                    pass
+                
+                # 添加縮排空格
+                indent_space = " " * (indent_level * 3)  # 每級縮排3個空格
+                
+                # 檢查是否有編號
+                has_numbering = False
+                numbering_text = ""
+                try:
+                    if hasattr(para, 'style') and para.style and 'List' in para.style.name:
+                        has_numbering = True
+                    if hasattr(para, 'numbering') and para.numbering and para.numbering.level is not None:
+                        has_numbering = True
+                except:
+                    pass
+                
+                # 處理文本，嘗試識別編號
+                text = para.text
+                if has_numbering:
+                    # 嘗試從文本中提取編號
+                    match = re.match(r'^(\d+\.|[a-zA-Z]+\.|[ivxIVX]+\.|[\u2022\u25E6\u25AA]|\-)\s+(.*)$', text)
+                    if match:
+                        numbering_text = match.group(1)
+                        text = match.group(2)
+                        paragraphs.append(f"{indent_space}{numbering_text} {text}")
+                    else:
+                        paragraphs.append(f"{indent_space}• {text}")
+                else:
+                    paragraphs.append(f"{indent_space}{text}")
 
         # 提取表格內容
         for table in doc.tables:
@@ -929,8 +967,16 @@ class TextCorrectionTool:
                 if row_text:
                     paragraphs.append('\t'.join(row_text))
 
-        # 使用兩個換行符連接段落，保留格式
-        return '\n\n'.join(paragraphs)
+        # 使用單個換行符連接段落，保留格式
+        text = '\n'.join(paragraphs)
+        
+        # 移除文本末尾可能出現的斜線
+        if text.endswith('/'):
+            text = text[:-1]
+        text = text.replace('/\n', '\n')
+        text = text.replace('/ \n', '\n')
+        
+        return text
 
     def extract_images_from_docx(self, file_path):
         """從Word文件中提取圖片

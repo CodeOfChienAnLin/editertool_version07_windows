@@ -1,0 +1,96 @@
+2025-04-02 19:57:37,502 - TextCorrectionTool - ERROR - Text Correction Error: Word 文件文字校正時發生錯誤: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+2025-04-02 19:57:37,502 - TextCorrectionTool - ERROR - Text Correction Error: Word 文件文字校正時發生錯誤: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+2025-04-02 19:57:37,502 - TextCorrectionTool - ERROR - Traceback: Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\text_01_correction.py", line 166, in correct_text_for_word_import
+    from config_02_protected_words import check_simplified_chinese
+ImportError: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+
+2025-04-02 19:57:37,502 - TextCorrectionTool - ERROR - Traceback: Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\text_01_correction.py", line 166, in correct_text_for_word_import
+    from config_02_protected_words import check_simplified_chinese
+ImportError: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+
+2025-04-02 19:57:52,144 - TextCorrectionTool - ERROR - Image Extraction Error: 提取圖片時發生錯誤: Package not found at '//Mac/第二個硬碟\07_工作/汰舊換欣總部遭破壞.docx'
+2025-04-02 19:57:52,144 - TextCorrectionTool - ERROR - Image Extraction Error: 提取圖片時發生錯誤: Package not found at '//Mac/第二個硬碟\07_工作/汰舊換欣總部遭破壞.docx'
+2025-04-02 19:57:52,144 - TextCorrectionTool - ERROR - Traceback: Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\file_02_image_handler.py", line 23, in extract_images_from_docx
+    doc = Document(file_path)
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\apple\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\docx\api.py", line 27, in Document
+    document_part = cast("DocumentPart", Package.open(docx).main_document_part)
+                                         ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\apple\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\docx\opc\package.py", line 127, in open
+    pkg_reader = PackageReader.from_file(pkg_file)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\apple\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\docx\opc\pkgreader.py", line 22, in from_file
+    phys_reader = PhysPkgReader(pkg_file)
+                  ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\apple\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\docx\opc\phys_pkg.py", line 21, in __new__
+    raise PackageNotFoundError("Package not found at '%s'" % pkg_file)
+docx.opc.exceptions.PackageNotFoundError: Package not found at '//Mac/第二個硬碟\07_工作/汰舊換欣總部遭破壞.docx'
+
+2025-04-02 19:57:52,144 - TextCorrectionTool - ERROR - Traceback: Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\file_02_image_handler.py", line 23, in extract_images_from_docx
+    doc = Document(file_path)
+          ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\apple\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\docx\api.py", line 27, in Document
+    document_part = cast("DocumentPart", Package.open(docx).main_document_part)
+                                         ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\apple\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\docx\opc\package.py", line 127, in open
+    pkg_reader = PackageReader.from_file(pkg_file)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\apple\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\docx\opc\pkgreader.py", line 22, in from_file
+    phys_reader = PhysPkgReader(pkg_file)
+                  ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\apple\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\docx\opc\phys_pkg.py", line 21, in __new__
+    raise PackageNotFoundError("Package not found at '%s'" % pkg_file)
+docx.opc.exceptions.PackageNotFoundError: Package not found at '//Mac/第二個硬碟\07_工作/汰舊換欣總部遭破壞.docx'
+
+2025-04-02 19:58:12,822 - TextCorrectionTool - ERROR - Text Correction Error: Word 文件文字校正時發生錯誤: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+2025-04-02 19:58:12,822 - TextCorrectionTool - ERROR - Text Correction Error: Word 文件文字校正時發生錯誤: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+2025-04-02 19:58:12,822 - TextCorrectionTool - ERROR - Traceback: Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\text_01_correction.py", line 166, in correct_text_for_word_import
+    from config_02_protected_words import check_simplified_chinese
+ImportError: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+
+2025-04-02 19:58:12,822 - TextCorrectionTool - ERROR - Traceback: Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\text_01_correction.py", line 166, in correct_text_for_word_import
+    from config_02_protected_words import check_simplified_chinese
+ImportError: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+
+2025-04-02 19:58:53,603 - TextCorrectionTool - ERROR - Text Correction Error: Word 文件文字校正時發生錯誤: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+2025-04-02 19:58:53,603 - TextCorrectionTool - ERROR - Text Correction Error: Word 文件文字校正時發生錯誤: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+2025-04-02 19:58:53,644 - TextCorrectionTool - ERROR - Traceback: Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\text_01_correction.py", line 166, in correct_text_for_word_import
+    from config_02_protected_words import check_simplified_chinese
+ImportError: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+
+2025-04-02 19:58:53,644 - TextCorrectionTool - ERROR - Traceback: Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\text_01_correction.py", line 166, in correct_text_for_word_import
+    from config_02_protected_words import check_simplified_chinese
+ImportError: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+
+2025-04-02 20:00:34,867 - TextCorrectionTool - ERROR - Text Correction Error: Word 文件文字校正時發生錯誤: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+2025-04-02 20:00:34,867 - TextCorrectionTool - ERROR - Text Correction Error: Word 文件文字校正時發生錯誤: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+2025-04-02 20:00:34,867 - TextCorrectionTool - ERROR - Traceback: Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\text_01_correction.py", line 166, in correct_text_for_word_import
+    from config_02_protected_words import check_simplified_chinese
+ImportError: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+
+2025-04-02 20:00:34,867 - TextCorrectionTool - ERROR - Traceback: Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\text_01_correction.py", line 166, in correct_text_for_word_import
+    from config_02_protected_words import check_simplified_chinese
+ImportError: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+
+2025-04-02 20:00:52,335 - TextCorrectionTool - ERROR - Text Correction Error: Word 文件文字校正時發生錯誤: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+2025-04-02 20:00:52,335 - TextCorrectionTool - ERROR - Text Correction Error: Word 文件文字校正時發生錯誤: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+2025-04-02 20:00:52,367 - TextCorrectionTool - ERROR - Traceback: Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\text_01_correction.py", line 166, in correct_text_for_word_import
+    from config_02_protected_words import check_simplified_chinese
+ImportError: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+
+2025-04-02 20:00:52,367 - TextCorrectionTool - ERROR - Traceback: Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\text_01_correction.py", line 166, in correct_text_for_word_import
+    from config_02_protected_words import check_simplified_chinese
+ImportError: cannot import name 'check_simplified_chinese' from 'config_02_protected_words' (y:\02_程式\10_program\win11_windsurf_project\editertool_version07\config_02_protected_words.py)
+
