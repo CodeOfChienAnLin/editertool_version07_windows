@@ -207,12 +207,12 @@ class TextCorrectionTool:
 
 
         # --- 圖片顯示區域框架 (Pack at the bottom) ---
-        self.image_frame = tk.Frame(self.text_correction_tab, height=120, bg="white") # Fixed height
+        self.image_frame = tk.Frame(self.text_correction_tab, height=120) # Fixed height, Removed bg="white"
         self.image_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5) # Pack image frame at the bottom
         self.image_frame.pack_propagate(False)
 
         # 圖片顯示區域的滾動畫布
-        self.image_canvas = tk.Canvas(self.image_frame, bg="white")
+        self.image_canvas = tk.Canvas(self.image_frame) # Removed bg="white"
         self.image_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # 圖片區域的垂直滾動條
@@ -221,14 +221,14 @@ class TextCorrectionTool:
         self.image_canvas.configure(yscrollcommand=image_scrollbar.set)
 
         # 創建一個框架來放置圖片
-        self.image_container = tk.Frame(self.image_canvas, bg="white")
+        self.image_container = tk.Frame(self.image_canvas)  # Removed bg="white"
         self.image_canvas.create_window((0, 0), window=self.image_container, anchor="nw")
 
         # 綁定圖片容器的配置事件
         self.image_container.bind("<Configure>", self.on_image_container_configure)
 
         # 按鈕框架 (圖片下載)
-        img_button_frame = tk.Frame(self.image_frame, bg="white") # Renamed to avoid conflict
+        img_button_frame = tk.Frame(self.image_frame)  # Removed bg="white"
         img_button_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
 
         # 下載圖片按鈕
@@ -443,7 +443,7 @@ class TextCorrectionTool:
             canvas_bg = "white"
             toolbar_bg = "SystemButtonFace"
             img_container_bg = "white"
-            cursor_color = "black"
+            cursor_color = "black"        # 文字區域游標顏色 (確保為黑色)
             notebook_bg = "SystemButtonFace"
             tab_bg = "SystemButtonFace"
             selected_tab_bg = "SystemHighlight" # 使用系統高亮色 (或自訂淺灰色)
@@ -462,27 +462,21 @@ class TextCorrectionTool:
         self.image_canvas.configure(bg=canvas_bg)
         # 套用主題到 Canvas *內部* 的容器 Frame
         self.image_container.configure(bg=img_container_bg)
-        # 套用主題到容器內的圖片標籤 (假設它們是 Label)
+        
+        # 強制設定圖片區域的所有子元件背景色
         for child in self.image_container.winfo_children():
-             self.apply_theme_to_widget(child) # 使用輔助函數
-
-        # 應用主題到圖片下載按鈕框架及其按鈕
-        img_button_frame = None
-        # 穩健地找到包含下載/路徑按鈕的框架
-        # (假設它被 pack 在 image_frame 的右側)
+            if isinstance(child, tk.Label):  # 圖片標籤
+                child.configure(bg=img_container_bg)
+        
+        # 強制設定下載按鈕區域背景色
         for widget in self.image_frame.winfo_children():
-            if isinstance(widget, tk.Frame) and widget.winfo_manager() == 'pack':
-                pack_info = widget.pack_info()
-                if 'side' in pack_info and pack_info['side'] == tk.RIGHT:
-                    img_button_frame = widget
-                    break
-
-        if img_button_frame:
-             img_button_frame.configure(bg=bg_color) # 設定框架本身的背景
-             for child in img_button_frame.winfo_children():
-                 self.apply_theme_to_widget(child) # 設定內部按鈕的主題
-
-
+            if isinstance(widget, tk.Frame) and widget != self.image_canvas:
+                widget.configure(bg=bg_color)
+                # 設定按鈕框架內的所有按鈕
+                for btn in widget.winfo_children():
+                    if isinstance(btn, tk.Button):
+                        btn.configure(bg=button_bg, fg=button_fg)
+        
         # 應用主題到狀態欄
         self.status_bar.configure(bg=bg_color, fg=fg_color)
 
@@ -712,6 +706,7 @@ class TextCorrectionTool:
         參數:
             file_path: Word檔案路徑
             password: 檔案密碼（如果有的話）
+
         """
         # 更新狀態欄和文字區域，顯示正在處理的提示
         self.status_bar.config(text=f"正在處理檔案: {os.path.basename(file_path)}...")
@@ -1004,9 +999,11 @@ class TextCorrectionTool:
         # 保存引用，防止垃圾回收
         self.image_refs.append(tk_image)
 
-        # 創建標籤來顯示圖片
-        image_label = tk.Label(self.image_container, image=tk_image, bg="white")
+        # 創建標籤來顯示圖片 (移除 bg="white"，讓主題控制背景色)
+        image_label = tk.Label(self.image_container, image=tk_image)
         image_label.grid(row=0, column=index, padx=5, pady=5, sticky="w")
+        # 在創建後立即套用一次主題，確保初始顏色正確
+        self.apply_theme_to_widget(image_label)
 
         # 綁定點擊事件，以便放大查看
         image_label.bind("<Button-1>", lambda event, img=image, idx=index: self.show_full_image(img, idx))
@@ -1382,6 +1379,7 @@ class TextCorrectionTool:
         manage_window = tk.Toplevel(self.root)
         manage_window.title("管理保護詞彙")
         manage_window.geometry("400x500")
+        manage_window.resizable(False, False)
 
         # 創建一個框架
         frame = tk.Frame(manage_window)
@@ -1499,56 +1497,6 @@ class TextCorrectionTool:
         settings_window.transient(self.root)  # 設為主視窗的子視窗
         settings_window.grab_set()  # 模態視窗
 
-        # 段落內行距選擇    
-        tk.Label(frame, text="段落內行距:").grid(row=3, column=0, sticky=tk.W, pady=5)
-        spacing_within_var = tk.IntVar(value=self.settings.get("line_spacing_within", 0))
-        # 允許 0 到 10 的間距
-        spacing_within_spinbox = ttk.Spinbox(frame, from_=0, to=10, textvariable=spacing_within_var, width=5)
-        spacing_within_spinbox.grid(row=3, column=1, sticky=tk.W, pady=5)
-
-        # 設定更新預覽的回調
-        font_var.trace_add("write", update_preview)
-        size_var.trace_add("write", update_preview)
-        spacing_var.trace_add("write", update_preview)
-        spacing_within_var.trace_add("write", update_preview)
-
-        def update_preview(*args):
-            font_family = font_var.get()
-            font_size = size_var.get()
-            line_spacing = spacing_var.get()
-            line_spacing_within = spacing_within_var.get()
-            try:
-                # 更新字體和行距
-                preview_text.configure(
-                    font=(font_family, font_size), 
-                    spacing3=line_spacing,
-                    spacing1=line_spacing_within
-                )
-            except tk.TclError as e:
-                # 處理可能的字體錯誤
-                print(f"預覽錯誤: {e}")
-                preview_text.configure(
-                    font=("Arial", font_size), 
-                    spacing3=line_spacing,
-                    spacing1=line_spacing_within
-                )  # Fallback font
-
-        spacing_within_var.trace_add("write", update_preview)
-
-        def save_settings():
-            self.settings["font_family"] = font_var.get()
-            self.settings["font_size"] = size_var.get()
-            self.settings["line_spacing"] = spacing_var.get()
-            self.settings["line_spacing_within"] = spacing_within_var.get()
-            self.save_settings()
-            # 應用字體和行距到主文字區域
-            self.text_area.configure(
-                font=(self.settings["font_family"], self.settings["font_size"]),
-                spacing3=self.settings["line_spacing"],
-                spacing1=self.settings["line_spacing_within"]
-            )
-            settings_window.destroy()
-
         # 建立框架
         frame = tk.Frame(settings_window, padx=20, pady=20)
         frame.pack(fill=tk.BOTH, expand=True)
@@ -1577,11 +1525,18 @@ class TextCorrectionTool:
         spacing_spinbox = ttk.Spinbox(frame, from_=0, to=20, textvariable=spacing_var, width=5)
         spacing_spinbox.grid(row=2, column=1, sticky=tk.W, pady=5)
 
+        # 段落內行距選擇    
+        tk.Label(frame, text="段落內行距:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        spacing_within_var = tk.IntVar(value=self.settings.get("line_spacing_within", 0))
+        # 允許 0 到 10 的間距
+        spacing_within_spinbox = ttk.Spinbox(frame, from_=0, to=10, textvariable=spacing_within_var, width=5)
+        spacing_within_spinbox.grid(row=3, column=1, sticky=tk.W, pady=5)
+
         # 預覽區域
-        tk.Label(frame, text="預覽:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        tk.Label(frame, text="預覽:").grid(row=4, column=0, sticky=tk.W, pady=5)
 
         preview_text = tk.Text(frame, width=30, height=4, wrap=tk.WORD)
-        preview_text.grid(row=3, column=1, sticky=tk.W, pady=5)
+        preview_text.grid(row=4, column=1, sticky=tk.W, pady=5)
         preview_text.insert(tk.END, "這是預覽文字\nABCDEFG\n123456789")
 
         # 更新預覽的函數
@@ -1589,36 +1544,48 @@ class TextCorrectionTool:
             font_family = font_var.get()
             font_size = size_var.get()
             line_spacing = spacing_var.get()
+            line_spacing_within = spacing_within_var.get()
             try:
                 # 更新字體和行距
-                preview_text.configure(font=(font_family, font_size), spacing3=line_spacing)
+                preview_text.configure(
+                    font=(font_family, font_size), 
+                    spacing3=line_spacing,
+                    spacing1=line_spacing_within
+                )
             except tk.TclError as e:
                 # 處理可能的字體錯誤
                 print(f"預覽錯誤: {e}")
-                preview_text.configure(font=("Arial", font_size), spacing3=line_spacing) # Fallback font
+                preview_text.configure(
+                    font=("Arial", font_size), 
+                    spacing3=line_spacing,
+                    spacing1=line_spacing_within
+                )  # Fallback font
 
         # 綁定變更事件
         font_var.trace_add("write", update_preview)
         size_var.trace_add("write", update_preview)
-        spacing_var.trace_add("write", update_preview) # 綁定行距變數
+        spacing_var.trace_add("write", update_preview)
+        spacing_within_var.trace_add("write", update_preview)
 
         # 初始更新預覽
         update_preview()
 
         # 按鈕區域
         button_frame = tk.Frame(frame)
-        button_frame.grid(row=4, column=0, columnspan=2, pady=15) # Adjusted row and pady
+        button_frame.grid(row=5, column=0, columnspan=2, pady=15) # Adjusted row and pady
 
         # 確定按鈕
         def save_settings():
             self.settings["font_family"] = font_var.get()
             self.settings["font_size"] = size_var.get()
             self.settings["line_spacing"] = spacing_var.get() # 儲存行距
+            self.settings["line_spacing_within"] = spacing_within_var.get()
             self.save_settings()
             # 應用字體和行距到主文字區域
             self.text_area.configure(
                 font=(self.settings["font_family"], self.settings["font_size"]),
-                spacing3=self.settings["line_spacing"]
+                spacing3=self.settings["line_spacing"],
+                spacing1=self.settings["line_spacing_within"]
             )
             settings_window.destroy()
 
@@ -1693,7 +1660,8 @@ class TextCorrectionTool:
             button_fg = "white"
             canvas_bg = "#333333"  # 畫布背景
             toolbar_bg = "#3c3f41"  # 工具列背景
-            cursor_color = "white"  # 游標顏色設為白色，在深色背景下更容易看見
+            img_container_bg = "#333333" # 圖片容器 Frame 背景
+            cursor_color = "white"  # 文字區域游標顏色設為白色，在深色背景下更容易看見
         else:
             # 淺色模式
             bg_color = "white"
@@ -1704,32 +1672,37 @@ class TextCorrectionTool:
             button_fg = "black"
             canvas_bg = "white"
             toolbar_bg = "#f0f0f0"  # 工具列背景
-            cursor_color = "black"  # 游標顏色設為黑色，在淺色背景下更容易看見
+            img_container_bg = "white"
+            cursor_color = "black"  # 文字區域游標顏色設為黑色，在淺色背景下更容易看見
 
         # 應用主題到主視窗
         self.root.configure(bg=bg_color)
 
         # 應用主題到文字區域
         # 使用 insertbackground 讓游標在深色模式下可見
-        self.text_area.configure(bg=text_bg, fg=text_fg, insertbackground=cursor_color)
+        self.text_area.configure(bg=text_bg, fg=text_fg, insertbackground=cursor_color) # Ensure cursor color is applied
 
-        # 應用主題到文字區域
-        self.text_area.configure(
-            bg=text_bg, 
-            fg=text_fg, 
-            insertbackground=cursor_color,
-            spacing1=self.settings.get("line_spacing_within", 0)
-        )
-
-
-        # 應用主題到圖片下載按鈕框架及其按鈕
+        # 應用主題到圖片區域 Frame
+        self.image_frame.configure(bg=bg_color)
+        # 套用主題到 Canvas 本身
+        self.image_canvas.configure(bg=canvas_bg)
+        # 套用主題到 Canvas *內部* 的容器 Frame
+        self.image_container.configure(bg=img_container_bg)
+        
+        # 強制設定圖片區域的所有子元件背景色
+        for child in self.image_container.winfo_children():
+            if isinstance(child, tk.Label):  # 圖片標籤
+                child.configure(bg=img_container_bg)
+        
+        # 強制設定下載按鈕區域背景色
         for widget in self.image_frame.winfo_children():
-            if isinstance(widget, tk.Frame): # This is img_button_frame
+            if isinstance(widget, tk.Frame) and widget != self.image_canvas:
                 widget.configure(bg=bg_color)
-                for child in widget.winfo_children():
-                    if isinstance(child, tk.Button):
-                        child.configure(bg=button_bg, fg=button_fg)
-
+                # 設定按鈕框架內的所有按鈕
+                for btn in widget.winfo_children():
+                    if isinstance(btn, tk.Button):
+                        btn.configure(bg=button_bg, fg=button_fg)
+        
         # 應用主題到狀態欄
         self.status_bar.configure(bg=bg_color, fg=fg_color)
 
@@ -1909,7 +1882,7 @@ class TextCorrectionTool:
         frame.pack(fill=tk.BOTH, expand=True)
 
         # 日誌檔案列表
-        tk.Label(frame, text="選擇日誌檔案:").pack(anchor=tk.W, pady=(0, 5))
+        tk.Label(frame, text="選擇日誌檔案:").pack(anchor=tk.W)
 
         # 獲取日誌檔案列表
         log_dir = "logs"
