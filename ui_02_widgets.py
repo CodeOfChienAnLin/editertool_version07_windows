@@ -1,11 +1,15 @@
 """
 主要UI元件和TextCorrectionTool類別
 """
+# -*- coding: utf-8 -*-
+"""
+主要UI元件和TextCorrectionTool類別
+"""
 import os
 import sys
 import json
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog
+from tkinter import ttk, filedialog, messagebox, simpledialog, font # 導入 font
 import threading
 import datetime
 import traceback
@@ -24,12 +28,23 @@ from file_01_word_processor import load_and_display_word_content, parse_word_doc
 from file_02_image_handler import extract_images_from_docx, display_image, show_full_image, clear_images, download_images, choose_download_path
 from utils_02_shortcuts import create_shortcut_button, load_custom_shortcut_buttons
 
+# 導入代辦事項模組
+from todo_01_data import load_tasks_from_json, save_tasks_to_json
+from todo_02_dialogs import show_archived_tasks_window, show_subtask_dialog, HAS_TKCALENDAR # 導入 HAS_TKCALENDAR
+from todo_03_rendering import render_all_tasks, update_todo_scroll_region
+from todo_04_handlers import handle_add_main_task_click, handle_add_subtask_click, handle_edit_subtask_click, handle_archive_subtask_click
+
 # 嘗試導入 OpenCC
 try:
     import opencc
 except ImportError:
     opencc = None
     print("警告：未找到 opencc 模組。中文轉換功能將不可用。")
+
+# 檢查 tkcalendar 是否可用 (從 todo_02_dialogs 導入)
+if not HAS_TKCALENDAR:
+    print("警告：未找到 tkcalendar 庫，日期選擇將使用普通輸入框。")
+    print("請使用 'pip install tkcalendar' 安裝。")
 
 class TextCorrectionTool:
     """文字校正工具主類別"""
@@ -64,6 +79,15 @@ class TextCorrectionTool:
             messagebox.showerror("錯誤", f"無法初始化OpenCC轉換器: {str(e)}")
             self.converter = None
 
+        # --- 代辦事項相關初始化 (確保所有相關屬性在 create_widgets 前存在) ---
+        self.task_groups = []
+        self.archived_tasks = []
+        self.todo_canvas = None # 初始化為 None
+        self.todo_main_task_font = None
+        self.todo_sub_task_font = None
+        self.todo_sub_task_time_font = None
+        # --------------------------
+
         self.create_widgets()  # 創建UI元件
         self.setup_drag_drop()  # 設置拖放功能
 
@@ -81,6 +105,15 @@ class TextCorrectionTool:
 
     def create_widgets(self):
         """創建所有UI元件"""
+        # --- 初始化代辦事項字體 (在 create_widgets 中進行) ---
+        try: self.todo_main_task_font = font.Font(family="新細明體", size=14, weight="bold")
+        except Exception: self.todo_main_task_font = font.Font(size=14, weight="bold") # Fallback
+        try: self.todo_sub_task_font = font.Font(family="標楷體", size=12)
+        except Exception: self.todo_sub_task_font = font.Font(size=12) # Fallback
+        try: self.todo_sub_task_time_font = font.Font(family="標楷體", size=10)
+        except Exception: self.todo_sub_task_time_font = font.Font(size=10) # Fallback
+        # -------------------------------------------------------
+
         # 選單列
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
@@ -125,16 +158,53 @@ class TextCorrectionTool:
         self.notebook.add(self.text_correction_tab, text="文字修正")
 
         # 創建代辦事項標籤頁
-        self.notes_tab = tk.Frame(self.notebook)
+        self.notes_tab = tk.Frame(self.notebook) # 使用 self.notes_tab
         self.notebook.add(self.notes_tab, text="代辦事項")
-        # Add a label to the notes tab for visibility testing
-        tk.Label(self.notes_tab, text="代辦事項功能區").pack(pady=20)
 
-        # --- 新增工具欄框架 ---
+        # --- 代辦事項標籤頁 UI (依照新佈局調整) ---
+
+        # 左側工具欄框架
+        todo_sidebar_frame = tk.Frame(self.notes_tab, width=100, relief="solid", borderwidth=1)
+        todo_sidebar_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(5, 0), pady=5)
+        todo_sidebar_frame.pack_propagate(False) # 防止框架縮小
+
+        # 任務區按鈕 (預設顯示，無需命令)
+        task_area_button = ttk.Button(todo_sidebar_frame, text="任務區", command=None) # 樣式可能需要調整
+        task_area_button.pack(fill="x", pady=2, padx=5)
+
+        # 封存區按鈕
+        archive_button = ttk.Button(todo_sidebar_frame, text="封存區", command=self.view_archived_tasks)
+        archive_button.pack(fill="x", pady=2, padx=5)
+
+        # 下載按鈕 (放置在底部)
+        download_button = ttk.Button(todo_sidebar_frame, text="下載", command=self.save_tasks) # 連接到儲存功能
+        download_button.pack(side="bottom", fill="x", pady=5, padx=5)
+
+        # 右側主內容框架 (Canvas)
+        todo_content_frame = tk.Frame(self.notes_tab)
+        todo_content_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # 代辦事項 Canvas (創建並賦值給 self.todo_canvas)
+        self.todo_canvas = tk.Canvas(todo_content_frame, bg='white', highlightthickness=0)
+
+        # 代辦事項捲軸 (父容器: todo_content_frame)
+        todo_v_scrollbar = ttk.Scrollbar(todo_content_frame, orient="vertical", command=self.todo_canvas.yview)
+        todo_h_scrollbar = ttk.Scrollbar(todo_content_frame, orient="horizontal", command=self.todo_canvas.xview)
+        self.todo_canvas.configure(yscrollcommand=todo_v_scrollbar.set, xscrollcommand=todo_h_scrollbar.set)
+
+        # Grid 佈局 Canvas 和捲軸 (在 todo_content_frame 內)
+        self.todo_canvas.grid(row=0, column=0, sticky="nsew")
+        todo_v_scrollbar.grid(row=0, column=1, sticky="ns")
+        todo_h_scrollbar.grid(row=1, column=0, sticky="ew")
+        todo_content_frame.grid_rowconfigure(0, weight=1) # 讓 Canvas 行可以擴展
+        todo_content_frame.grid_columnconfigure(0, weight=1) # 讓 Canvas 列可以擴展
+        # --------------------------
+
+        # --- 文字修正標籤頁 UI (再次確認元件放置順序) ---
+
+        # 1. 工具欄框架 (父容器: self.text_correction_tab)
         self.toolbar_main_frame = tk.Frame(self.text_correction_tab, relief=tk.RAISED, bd=1)
-        self.toolbar_main_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=(5, 0)) # Pack toolbar first
-
-        # 工具欄上層
+        #   工具欄上層 (父容器: self.toolbar_main_frame)
         self.toolbar_top_frame = tk.Frame(self.toolbar_main_frame)
         self.toolbar_top_frame.pack(side=tk.TOP, fill=tk.X)
 
@@ -168,15 +238,14 @@ class TextCorrectionTool:
                                 command=lambda s=sc: self.insert_text_at_cursor(s))
             btn.pack(side=tk.LEFT, padx=2, pady=2)
 
-        # 新增：載入並顯示自訂快捷字按鈕
+        #   新增：載入並顯示自訂快捷字按鈕
         self.load_custom_shortcut_buttons()
 
-        # --- 圖片顯示區域框架 (Pack at the bottom) ---
-        self.image_frame = tk.Frame(self.text_correction_tab, height=120) # Fixed height
-        self.image_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5) # Pack image frame at the bottom
-        self.image_frame.pack_propagate(False)
+        # 3. 圖片顯示區域框架 (父容器: self.text_correction_tab) - 先定義
+        self.image_frame = tk.Frame(self.text_correction_tab, height=120) # 固定高度
+        self.image_frame.pack_propagate(False) # 防止縮小
 
-        # 圖片顯示區域的滾動畫布
+        #   圖片顯示區域的滾動畫布 (父容器: self.image_frame)
         self.image_canvas = tk.Canvas(self.image_frame)
         self.image_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
@@ -200,15 +269,14 @@ class TextCorrectionTool:
         self.download_button = tk.Button(img_button_frame, text="下載圖片", command=self.download_images)
         self.download_button.pack(side=tk.TOP, fill=tk.X, padx=5, pady=2)
 
-        # 選擇路徑按鈕
+        #   選擇路徑按鈕
         self.path_button = tk.Button(img_button_frame, text="選擇路徑", command=self.choose_download_path)
         self.path_button.pack(side=tk.TOP, fill=tk.X, padx=5, pady=2)
 
-        # --- 文字處理區域框架 (Pack last to fill remaining space) ---
+        # 2. 文字處理區域框架 (父容器: self.text_correction_tab) - 先定義
         text_frame = tk.Frame(self.text_correction_tab)
-        text_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=5) # Pack after toolbar, before image_frame
 
-        # 添加垂直滾動條
+        #   添加垂直滾動條 (父容器: text_frame)
         y_scrollbar = tk.Scrollbar(text_frame, orient=tk.VERTICAL)
         y_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
@@ -231,14 +299,75 @@ class TextCorrectionTool:
         # 綁定事件
         self.text_area.bind("<<Modified>>", self.adjust_indentation)
 
-        # 設置滾動條命令
+        #   設置滾動條命令
         y_scrollbar.config(command=self.text_area.yview)
+
+        # --- 按照正確順序 pack 文字修正標籤頁的元件 ---
+        # 1. 工具欄置頂
+        self.toolbar_main_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=(5, 0))
+        # 3. 圖片區置底 (必須在文字區之前 pack side=BOTTOM)
+        self.image_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
+        # 2. 文字區填滿中間剩餘空間
+        text_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         # 狀態欄
         self.status_bar = tk.Label(self.root, text="就緒", bd=1, relief=tk.SUNKEN, anchor=tk.W)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
-    # 以下方法將被轉移到其他模組，這裡只保留介面和基本功能
+        # --- 初始渲染代辦事項 (延遲調用，傳遞參數) ---
+        # 使用 after 延遲初始渲染，確保所有元件已創建且 __init__ 已完成
+        self.root.after(10, self.render_all_tasks) # 直接傳遞方法引用
+        # ----------------------
+
+    # --- 代辦事項相關方法 ---
+    def render_all_tasks(self):
+        """渲染所有代辦事項到 Canvas"""
+        # 檢查必要的屬性是否存在
+        if not all([self.todo_canvas, self.task_groups is not None,
+                    self.todo_main_task_font, self.todo_sub_task_font, self.todo_sub_task_time_font]):
+            print("錯誤：缺少渲染所需的屬性 (canvas, task_groups, 或字體)")
+            return
+        # 調用渲染模組函數，傳遞必要的參數
+        render_all_tasks(
+            canvas=self.todo_canvas,
+            task_groups=self.task_groups,
+            main_task_font=self.todo_main_task_font,
+            sub_task_font=self.todo_sub_task_font,
+            sub_task_time_font=self.todo_sub_task_time_font,
+            tool_instance=self # 仍然需要傳遞 self 以便處理事件回呼
+        )
+
+    def add_main_task(self):
+        """處理新增主任務按鈕點擊"""
+        handle_add_main_task_click(self) # 調用處理函數
+
+    def add_sub_task(self, group_index):
+        """處理新增子任務按鈕點擊"""
+        handle_add_subtask_click(self, group_index) # 調用處理函數
+
+    def edit_sub_task(self, group_index, subtask_id):
+        """處理編輯子任務點擊"""
+        handle_edit_subtask_click(self, group_index, subtask_id) # 調用處理函數
+
+    def archive_sub_task(self, group_index, subtask_id):
+        """處理封存子任務點擊"""
+        handle_archive_subtask_click(self, group_index, subtask_id) # 調用處理函數
+
+    def load_tasks(self):
+        """載入代辦事項"""
+        if load_tasks_from_json(self): # 調用資料模組函數
+            self.render_all_tasks() # 載入成功後重新渲染 (會自動傳遞參數)
+
+    def save_tasks(self):
+        """儲存代辦事項"""
+        save_tasks_to_json(self) # 調用資料模組函數
+
+    def view_archived_tasks(self):
+        """顯示封存區視窗"""
+        show_archived_tasks_window(self) # 調用對話框模組函數
+    # --------------------------
+
+    # --- 文字修正相關方法 ---
     def undo_last_action(self):
         """還原上一步文字編輯操作"""
         try:
