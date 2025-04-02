@@ -1,7 +1,7 @@
 {
     "font_family": "標楷體",
     "font_size": 14,
-    "dark_mode": false,
+    "dark_mode": true,
     "line_spacing": 10,
     "line_spacing_within": 2,
     "custom_shortcuts": []
