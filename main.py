@@ -12,10 +12,22 @@ import opencc  # 用於中文文字轉換和校正
 import tempfile
 from docx import Document  # 用於更精確地讀取Word文檔格式
 from PIL import Image, ImageTk
-# from PIL import Image # Duplicate import removed
 import datetime
 import traceback
 import logging
+import platform # 用於檢查操作系統
+from pathlib import Path # --- 將 Path 導入移到這裡 ---
+
+# --- COM 相關匯入和檢查 (用於 Windows + Word 解析) ---
+HAS_PYWIN32 = False
+if platform.system() == 'Windows': # COM 只在 Windows 上可用
+    try:
+        import win32com.client as win32
+        import pythoncom # 需要初始化 COM
+        HAS_PYWIN32 = True
+    except ImportError:
+        print("警告：未找到 pywin32 模組。COM 功能需要 Windows、Microsoft Word 和 'pip install pywin32'。")
+        pass # 即使沒有 pywin32，程式仍可嘗試啟動 (但功能受限)
 
 class TextCorrectionTool:
     """文字校正工具主類別"""
@@ -640,22 +652,13 @@ class TextCorrectionTool:
                             # 繼續嘗試普通處理
                 except Exception as e:
                     print(f"開啟檔案時發生錯誤: {str(e)}")
+                            # 繼續嘗試普通處理
+                except Exception as e:
+                    print(f"開啟檔案時發生錯誤: {str(e)}")
                     # 繼續嘗試普通處理
 
-                # 嘗試不使用密碼處理
-                text = self.process_word_file(file_path)
-
-                # 如果成功處理，更新文字區域
-                if text:
-                    self.text_area.delete(1.0, tk.END)
-                    self.text_area.insert(tk.END, text)
-                    self.status_bar.config(text=f"已載入檔案: {os.path.basename(file_path)}")
-
-                    # 調整縮進
-                    self.adjust_indentation()
-
-                    # 自動校正文字
-                    self.correct_text()
+                # --- 修改：調用新的處理邏輯 ---
+                self.load_and_display_word_content(file_path)
 
             except Exception as e:
                 # 檢查是否為加密文件的錯誤
@@ -666,13 +669,239 @@ class TextCorrectionTool:
                     self.handle_password_protected_file(file_path)
                 else:
                     # 其他錯誤，顯示錯誤訊息
+                    error_msg = f"處理檔案時發生錯誤: {str(e)}\n{traceback.format_exc()}"
+                    print(error_msg)
+                    logging.error(error_msg) # 記錄錯誤
                     messagebox.showerror("錯誤", f"處理檔案時發生錯誤: {str(e)}")
-                    self.status_bar.config(text=f"處理檔案時發生錯誤: {str(e)}")
+                    self.status_bar.config(text=f"處理檔案時發生錯誤") # 簡化狀態欄訊息
 
         except Exception as e:
-            print(f"處理拖放檔案時發生錯誤: {str(e)}")
-            self.status_bar.config(text=f"處理拖放檔案時發生錯誤: {str(e)}")
-            messagebox.showerror("錯誤", f"處理拖放檔案時發生錯誤: {str(e)}")
+            error_msg = f"處理拖放檔案時發生嚴重錯誤: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            logging.error(error_msg) # 記錄錯誤
+            self.status_bar.config(text=f"處理拖放檔案時發生錯誤")
+            messagebox.showerror("錯誤", f"處理拖放檔案時發生嚴重錯誤: {str(e)}")
+
+    def load_and_display_word_content(self, file_path, password=None):
+        """
+        載入並顯示 Word 文件內容，整合 COM 和原有方法，並提取圖片。
+
+        參數:
+            file_path: Word檔案路徑
+            password: 檔案密碼（如果有的話）
+        """
+        self.status_bar.config(text=f"正在處理檔案: {os.path.basename(file_path)}...")
+        self.root.update_idletasks() # 更新UI以顯示狀態
+
+        # 清空之前的圖片
+        self.clear_images()
+
+        text = None
+        method_used = "None"
+
+        try:
+            # --- 優先嘗試 COM 解析 (Windows 且有 pywin32) ---
+            if platform.system() == 'Windows' and HAS_PYWIN32 and not password: # COM 方法通常不直接處理加密文件
+                print(f"嘗試使用 COM 方法解析: {file_path}")
+                self.status_bar.config(text=f"嘗試使用 COM 方法解析...")
+                self.root.update_idletasks()
+                text = self.parse_word_document_com(file_path)
+                if text is not None:
+                    method_used = "COM (MS Word)"
+                    print("COM 解析成功")
+                else:
+                    print("COM 解析失敗，嘗試回退...")
+                    self.status_bar.config(text=f"COM 解析失敗，嘗試其他方法...")
+                    self.root.update_idletasks()
+
+            # --- 如果 COM 失敗、不可用或需要密碼，則使用原有方法 ---
+            if text is None:
+                print(f"嘗試使用內建方法解析 (或處理加密文件): {file_path}")
+                self.status_bar.config(text=f"嘗試使用內建方法解析...")
+                self.root.update_idletasks()
+                text = self.process_word_file_internal(file_path, password)
+                if text is not None:
+                    method_used = "內建 (docx2txt/python-docx)"
+                    print("內建方法解析成功")
+                else:
+                    print("內建方法解析也失敗")
+
+            # --- 如果成功獲取文本，則提取圖片 ---
+            if text is not None:
+                print("文本解析成功，開始提取圖片...")
+                self.status_bar.config(text=f"文本解析成功 ({method_used})，正在提取圖片...")
+                self.root.update_idletasks()
+                # 圖片提取總是使用 python-docx，即使文本是用 COM 解析的
+                # 如果文件已解密到臨時文件，需要傳遞臨時文件路徑
+                file_to_extract_images_from = file_path
+                if password:
+                    # 如果有密碼，process_word_file_internal 會處理解密和臨時文件
+                    # 我們需要獲取那個臨時文件的路徑來提取圖片
+                    # (這部分需要在 process_word_file_internal 中返回臨時路徑或修改邏輯)
+                    # 暫時假設 process_word_file_internal 會處理好圖片提取
+                    # 或者，我們可以在這裡重新解密一次專門用於提圖，但效率低
+                    # **目前的 process_word_file_internal 結構會在解密後提取圖片，所以這裡可能不需要額外操作**
+                    # **但需要確認 process_word_file_internal 的圖片提取邏輯是否正確觸發**
+                    # **修改 process_word_file_internal，使其在解密後調用 extract_images_from_docx**
+                    pass # 假設 process_word_file_internal 已處理圖片提取
+                else:
+                    # 對於無密碼文件，直接提取
+                    self.extract_images_from_docx(file_to_extract_images_from)
+
+                # --- 更新 UI ---
+                self.text_area.delete(1.0, tk.END)
+                self.text_area.insert(tk.END, text)
+                self.status_bar.config(text=f"已載入: {os.path.basename(file_path)} (使用 {method_used})")
+                self.adjust_indentation()
+                self.correct_text()
+
+            else:
+                # 所有方法都失敗
+                messagebox.showerror("錯誤", f"無法讀取檔案 '{os.path.basename(file_path)}'。\n兩種解析方法均失敗。")
+                self.status_bar.config(text=f"讀取檔案失敗: {os.path.basename(file_path)}")
+
+        except FileNotFoundError as fnf_error:
+             messagebox.showerror("錯誤", f"找不到檔案: {fnf_error}")
+             self.status_bar.config(text="找不到檔案")
+        except msoffcrypto.exceptions.DecryptionError as decrypt_error:
+             messagebox.showerror("解密錯誤", f"解密失敗，密碼可能不正確: {decrypt_error}")
+             self.status_bar.config(text="解密失敗，密碼錯誤")
+        except Exception as e:
+            error_msg = f"處理 Word 文件時發生未知錯誤: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            logging.error(error_msg)
+            messagebox.showerror("錯誤", f"處理 Word 文件時發生未知錯誤: {str(e)}")
+            self.status_bar.config(text="處理檔案時發生錯誤")
+
+
+    def process_word_file_internal(self, file_path, password=None):
+        """
+        處理Word檔案（內部方法，優先使用 docx2txt，回退到 python-docx）。
+        如果提供密碼，則先解密。
+        **修改：** 在解密成功後調用圖片提取。
+
+        參數:
+            file_path: Word檔案路徑
+            password: 檔案密碼（如果有的話）
+
+        回傳:
+            檔案內容 (str) 或 None (如果失敗)
+        """
+        # 檢查檔案是否存在
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"找不到檔案: {file_path}")
+
+        # 如果提供了密碼，嘗試解密檔案
+        if password:
+            temp_path = None # 初始化
+            try:
+                # 創建一個臨時檔案來存儲解密後的內容
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as temp_file:
+                    temp_path = temp_file.name
+
+                # 打開加密檔案
+                with open(file_path, 'rb') as f:
+                    file_bytes = f.read()
+
+                # 創建一個 BytesIO 對象
+                file_stream = BytesIO(file_bytes)
+
+                # 使用 msoffcrypto 解密
+                ms_file = msoffcrypto.OfficeFile(file_stream)
+                ms_file.load_key(password=password)
+
+                with open(temp_path, 'wb') as f:
+                    ms_file.decrypt(f)
+
+                # 處理解密後的檔案
+                text = self._process_unencrypted_file(temp_path)
+
+                # --- 新增：在解密成功後提取圖片 ---
+                if text is not None:
+                    print(f"解密成功，從臨時文件提取圖片: {temp_path}")
+                    self.extract_images_from_docx(temp_path)
+                else:
+                    print("解密後文件文本提取失敗，跳過圖片提取")
+
+                return text # 返回文本內容
+            except msoffcrypto.exceptions.DecryptionError as decrypt_error:
+                 print(f"解密失敗: {decrypt_error}")
+                 raise # 重新拋出解密錯誤，讓上層處理
+            except Exception as e:
+                # 如果解密或後續處理失敗，拋出異常
+                print(f"處理加密文件時出錯: {e}")
+                raise Exception(f"處理加密文件失敗: {str(e)}")
+            finally:
+                 # 確保刪除臨時檔案
+                 if temp_path and os.path.exists(temp_path):
+                     try:
+                         os.unlink(temp_path)
+                         print(f"已刪除臨時文件: {temp_path}")
+                     except OSError as unlink_error:
+                         print(f"警告：無法刪除臨時文件 {temp_path}: {unlink_error}")
+        else:
+            # 處理未加密的檔案
+            text = self._process_unencrypted_file(file_path)
+            # --- 對於未加密文件，圖片提取由 load_and_display_word_content 調用 ---
+            # self.extract_images_from_docx(file_path) # 不在這裡提取，由上層調用
+            return text
+
+    # process_word_file 函數現在被 load_and_display_word_content 和 process_word_file_internal 取代
+    # 可以刪除舊的 process_word_file 函數，或者保留它作為內部實現細節（但不直接從 UI 調用）
+    # 這裡選擇重命名舊函數為 internal，並讓 load_and_display_word_content 成為主要入口
+
+    # def process_word_file(self, file_path, password=None):
+    #     """(舊函數 - 不再直接使用) 處理Word檔案..."""
+    #     # ... 舊的實現 ...
+    #     pass
+
+
+    def _process_unencrypted_file(self, file_path):
+        """處理未加密的Word檔案
+
+        參數:
+            file_path: Word檔案路徑
+
+        回傳:
+            檔案內容
+        """
+        try:
+            # 嘗試使用 docx2txt 提取文字
+            try:
+                import docx2txt
+                text = docx2txt.process(file_path)
+                print("使用 docx2txt 成功提取文字")
+                return text
+            except Exception as docx2txt_error:
+                print(f"docx2txt 失敗: {docx2txt_error}，嘗試使用 python-docx")
+                # 如果 docx2txt 失敗，嘗試使用 python-docx
+                try:
+                    import docx
+                    doc = docx.Document(file_path)
+                    text = "\n".join([para.text for para in doc.paragraphs])
+                    print("使用 python-docx 成功提取文字")
+                    return text
+                except Exception as docx_error:
+                    print(f"python-docx 失敗: {docx_error}，嘗試使用 COM")
+                    # 如果 python-docx 也失敗，嘗試使用 COM 方法
+                    text = self.parse_word_document_com(file_path)
+                    if text:
+                        print("使用 COM 成功提取文字")
+                        return text
+                    else:
+                        raise Exception("所有提取方法都失敗")
+        except Exception as e:
+            # 檢查是否為加密文件的錯誤
+            error_str = str(e).lower()
+            if self._is_password_error(error_str):
+                # 可能是加密文件，嘗試使用密碼處理
+                print(f"檢測到加密錯誤: {error_str}")
+                self.handle_password_protected_file(file_path)
+            else:
+                # 其他錯誤，顯示錯誤訊息
+                messagebox.showerror("錯誤", f"處理檔案時發生錯誤: {str(e)}")
+                self.status_bar.config(text=f"處理檔案時發生錯誤: {str(e)}")
+            raise e  # 重新拋出異常，讓上層函數知道處理失敗
 
     def process_word_file(self, file_path, password=None):
         """處理Word檔案
@@ -733,43 +962,6 @@ class TextCorrectionTool:
             self.extract_images_from_docx(file_path)
 
             return text
-
-    def _process_unencrypted_file(self, file_path):
-        """處理未加密的Word檔案
-
-        參數:
-            file_path: Word檔案路徑
-
-        回傳:
-            檔案內容
-        """
-        # 先嘗試使用 docx2txt
-        try:
-            text = docx2txt.process(file_path)
-            if text:
-                return text
-        except Exception as e:
-            print(f"使用 docx2txt 處理失敗: {str(e)}")
-
-            # 如果是加密錯誤，直接拋出
-            if self._is_password_error(str(e)):
-                raise Exception(f"檔案可能有密碼保護: {str(e)}")
-
-        # 如果 docx2txt 失敗，嘗試使用 python-docx
-        try:
-            doc = Document(file_path)
-            text = self._extract_text_from_document(doc)
-            if text:
-                return text
-        except Exception as docx_e:
-            print(f"使用 python-docx 處理失敗: {str(docx_e)}")
-
-            # 如果是加密錯誤，直接拋出
-            if self._is_password_error(str(docx_e)):
-                raise Exception(f"檔案可能有密碼保護: {str(docx_e)}")
-
-            # 如果兩種方法都失敗，則拋出異常
-            raise Exception(f"無法讀取文件: {str(docx_e)}")
 
     def _is_password_error(self, error_message):
         """檢查錯誤訊息是否與密碼保護相關
@@ -997,21 +1189,13 @@ class TextCorrectionTool:
 
             if file_path:
                 print(f"選擇的檔案: {file_path}")
-                self.status_bar.config(text=f"選擇的檔案: {file_path}")
-                text = self.process_word_file(file_path)
-                if text:
-                    self.text_area.delete(1.0, tk.END)
-                    self.text_area.insert(tk.END, text)
-                    self.status_bar.config(text=f"已載入檔案: {os.path.basename(file_path)}")
-
-                # 調整縮進
-                self.adjust_indentation()
-
-                # 自動校正文字
-                self.correct_text()
+                # --- 修改：調用新的處理邏輯 ---
+                self.load_and_display_word_content(file_path)
 
         except Exception as e:
-            print(f"開啟檔案錯誤: {str(e)}")
+            error_msg = f"開啟檔案時發生錯誤: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            logging.error(error_msg) # 記錄錯誤
             self.status_bar.config(text="開啟檔案時出錯")
             messagebox.showerror("錯誤", f"無法開啟檔案: {str(e)}")
 
@@ -1555,7 +1739,7 @@ class TextCorrectionTool:
                 if isinstance(child, tk.Button):
                     child.configure(bg=button_bg, fg=button_fg)
             # Apply to widgets in bottom toolbar (if any added later)
-            for child in self.toolbar_bottom_frame.winfo_children():
+            for child in self.toolbar_bottom_frame.winfo_children(): # 包括動態新增的按鈕
                  if isinstance(child, tk.Button):
                      child.configure(bg=button_bg, fg=button_fg)
                  elif isinstance(child, tk.Label): # Example for labels if added
@@ -1592,21 +1776,18 @@ class TextCorrectionTool:
             if i > 0 and lines[i-1].strip():
                 prev_first_char_pos = len(lines[i-1]) - len(lines[i-1].lstrip())
 
-                # 如果當前行是前一行的換行部分（由自動換行產生）
-                # 這裡需要根據實際情況調整判斷邏輯
-                if first_char_pos == 0 and len(lines[i]) > 0:
-                    # 設置縮進標籤
-                    tag_name = f"indent_{i}"
-                    self.text_area.tag_configure(tag_name, lmargin1=prev_first_char_pos)
+                # 設置縮進標籤
+                tag_name = f"indent_{i}"
+                self.text_area.tag_configure(tag_name, lmargin1=prev_first_char_pos)
 
-                    # 應用標籤到當前行
-                    line_start = f"{i+1}.0"
-                    line_end = f"{i+1}.{len(lines[i])}"
-                    try:
-                        self.text_area.tag_add(tag_name, line_start, line_end)
-                    except tk.TclError:
-                         # 可能在 Text 元件初始化或銷毀過程中觸發，忽略
-                        pass
+                # 應用標籤到當前行
+                line_start = f"{i+1}.0"
+                line_end = f"{i+1}.{len(lines[i])}"
+                try:
+                    self.text_area.tag_add(tag_name, line_start, line_end)
+                except tk.TclError:
+                     # 可能在 Text 元件初始化或銷毀過程中觸發，忽略
+                    pass
 
     def adjust_text_formatting(self, event=None):
         """調整文字格式，包括縮進和對齊"""
@@ -1622,21 +1803,11 @@ class TextCorrectionTool:
         # 處理有密碼保護的檔案
         password = self.ask_password()
         if password:
-            try:
-                # 使用密碼解密檔案
-                text = self.process_word_file(file_path, password)
-                self.text_area.delete(1.0, tk.END)
-                self.text_area.insert(tk.END, text)
-                self.status_bar.config(text=f"已載入加密檔案: {os.path.basename(file_path)}")
-
-                # 調整縮進
-                self.adjust_indentation()
-
-                # 自動校正文字
-                self.correct_text()
-            except Exception as e:
-                messagebox.showerror("錯誤", f"解密失敗，密碼可能不正確: {str(e)}")
-                self.status_bar.config(text=f"解密失敗: {os.path.basename(file_path)}")
+            # --- 修改：調用新的處理邏輯，並傳遞密碼 ---
+            self.load_and_display_word_content(file_path, password)
+        else:
+            # 用户取消输入密码
+            self.status_bar.config(text="已取消密碼輸入")
 
     def ask_password(self):
         """顯示密碼輸入對話框
@@ -1821,12 +1992,176 @@ class TextCorrectionTool:
         # 初始顯示第一個日誌檔案的內容
         update_log_content()
 
+    # --- 新增：從 test_01.py 複製來的 COM 解析函數 (修正縮排) ---
+    def parse_word_document_com(self, filepath: str):
+        """
+        使用 Windows COM 與 Microsoft Word 互動來解析 .docx 文件，
+        以嘗試獲取包括自動編號在內的渲染後文字。
+
+        Args:
+            filepath (str): Word 文件的路徑。
+
+        Returns:
+            str | None: 解析後的文字內容，包含自動編號和縮排。
+                          如果發生錯誤、缺少依賴或無法執行則返回 None。
+        """
+        # 確保路徑是 Path 對象
+        filepath = Path(filepath)
+
+        if not platform.system() == 'Windows':
+            print("錯誤：COM 功能僅在 Windows 上受支持。")
+            return None
+        if not HAS_PYWIN32:
+            print("錯誤：缺少 pywin32 模組，無法使用 COM 功能。")
+            return None
+
+        if not filepath.is_file():
+            print(f"錯誤：找不到檔案 {filepath}")
+            return None
+
+        word_app = None
+        doc = None
+        com_initialized = False
+        try:
+            # 初始化 COM 環境
+            try:
+                pythoncom.CoInitialize()
+                com_initialized = True
+            except Exception as e:
+                print(f"警告：初始化 COM 失敗: {e} (嘗試繼續)")
+
+            parsed_content = []
+            # 啟動 Word 應用程式 (嘗試後台執行)
+            try:
+                word_app = win32.Dispatch("Word.Application")
+            except pythoncom.com_error as ce:
+                 hr, msg, exc, arg = ce.args
+                 print(f"COM 錯誤 (Dispatch): HRESULT={hr}, Message={msg}")
+                 if hr == -2147221005: # CO_E_CLASSSTRING
+                     messagebox.showerror("COM 錯誤", "無法啟動 Microsoft Word。\n請確認已正確安裝 Word。")
+                 else:
+                     messagebox.showerror("COM 錯誤", f"啟動 Word 時發生 COM 錯誤:\n{msg}")
+                 return None
+
+            word_app.Visible = False # 不顯示 Word 視窗
+            try:
+                word_app.DisplayAlerts = 0 # wdAlertsNone = 0
+            except Exception as e:
+                print(f"警告：無法設置 DisplayAlerts 屬性: {e}")
+
+            # 打開文件
+            try:
+                 doc = word_app.Documents.Open(str(filepath.resolve()), ReadOnly=True)
+            except pythoncom.com_error as ce:
+                hr, msg, exc, arg = ce.args
+                print(f"COM 錯誤 (Open): HRESULT={hr}, Message={msg}")
+                messagebox.showerror("文件開啟錯誤", f"無法透過 Word 開啟檔案 '{filepath.name}':\n{msg}\n\n請檢查文件是否存在、未損壞且 Word 可以開啟它。")
+                if word_app:
+                    try: word_app.Quit()
+                    except: pass
+                return None
+
+            # --- 處理縮排 ---
+            POINTS_PER_INDENT_LEVEL = 18 # 每 18 磅 (Point) 算一級縮排 (可調整)
+            SPACES_PER_INDENT_LEVEL = 3  # 每級縮排對應的空格數 (可調整)
+
+            # 迭代文件中的段落
+            try:
+                for i, para_com in enumerate(doc.Paragraphs):
+                    indent_space = ""
+                    formatted_line = "[讀取段落時發生錯誤]"
+                    try:
+                        para_range = para_com.Range
+                        list_string = para_range.ListFormat.ListString
+                        full_text = para_range.Text
+                        actual_text = full_text.rstrip('\r\n')
+
+                        # --- 計算縮排 ---
+                        indent_points = 0.0
+                        try:
+                            indent_points = para_com.Format.LeftIndent
+                        except AttributeError: pass
+                        except pythoncom.com_error as ce: print(f"警告：獲取段落 {i+1} 縮排時 COM 錯誤: {ce}")
+                        except Exception as indent_err: print(f"警告：獲取段落 {i+1} 縮排時出錯: {indent_err}")
+
+                        if indent_points > 0:
+                            indent_level = int(indent_points / POINTS_PER_INDENT_LEVEL)
+                            if indent_level < 0: indent_level = 0
+                            indent_space = " " * (indent_level * SPACES_PER_INDENT_LEVEL)
+
+                        # --- 組合輸出 ---
+                        separator = "\t"
+
+                        if list_string:
+                            temp_text = actual_text
+                            if list_string and temp_text.startswith(list_string):
+                                temp_text = temp_text[len(list_string):]
+                                temp_text = temp_text.lstrip(' \t')
+                            formatted_line = f"{indent_space}{list_string}{separator}{temp_text}"
+                        else:
+                            formatted_line = f"{indent_space}{actual_text}"
+
+                        parsed_content.append(formatted_line)
+
+                    except pythoncom.com_error as para_ce:
+                         print(f"警告：讀取段落 {i+1} 時發生 COM 錯誤: {para_ce}")
+                         parsed_content.append(f"{indent_space}[讀取段落 COM 錯誤]")
+                    except Exception as para_exc:
+                        print(f"警告：讀取段落 {i+1} 時發生未知錯誤: {para_exc}")
+                        try:
+                            raw_text = para_com.Range.Text.rstrip('\r\n')
+                            parsed_content.append(f"{indent_space}[讀取錯誤] {raw_text}")
+                        except:
+                            parsed_content.append(f"{indent_space}[讀取錯誤且無法獲取原始文本]")
+
+            except Exception as iter_exc:
+                print(f"錯誤：迭代段落時發生嚴重錯誤: {iter_exc}\n{traceback.format_exc()}")
+                messagebox.showerror("解析錯誤", f"處理文件 '{filepath.name}' 段落時發生錯誤:\n{iter_exc}\n\n可能只能顯示部分內容。")
+                pass
+
+            # 添加提示：不顯示圖片 (圖片提取由 extract_images_from_docx 處理)
+            # parsed_content.append("\n\n--- (注意：文件中的圖片需另外提取) ---")
+
+            return "\n".join(parsed_content)
+
+        except pythoncom.com_error as ce:
+            hr, msg, exc, arg = ce.args
+            print(f"處理 Word 文件時發生 COM 錯誤: HRESULT={hr}, Message={msg}\n{traceback.format_exc()}")
+            messagebox.showerror("COM 交互錯誤", f"與 Word 交互時發生 COM 錯誤：\n{msg}\n(請確認 Word 可正常運作)")
+            return None
+        except Exception as e:
+            error_details = traceback.format_exc()
+            print(f"解析 Word 文件時發生未知錯誤: {e}\n{error_details}")
+            messagebox.showerror("未知解析錯誤", f"解析 Word 文件時發生未知錯誤：\n{e}\n(詳細資訊請查看控制台輸出)")
+            return None
+        finally:
+            # --- 清理 COM ---
+            try:
+                if doc:
+                    doc.Close(SaveChanges=0)
+                    doc = None
+            except Exception as e_close: print(f"關閉 Word 文件時發生錯誤: {e_close}")
+            try:
+                if word_app:
+                    word_app.Quit()
+                    word_app = None
+            except Exception as e_quit: print(f"退出 Word 應用程式時發生錯誤: {e_quit}")
+            if com_initialized:
+                try:
+                    pythoncom.CoUninitialize()
+                except Exception as e_uninit: print(f"警告：清理 COM 環境失敗: {e_uninit}")
+
+# End of TextCorrectionTool class definition
+
+
+# --- Main execution block at top level ---
 def main():
     """程式主入口點"""
     try:
         # 嘗試使用 TkinterDnD2 創建支援拖放的根視窗
         try:
-            from tkinterdnd2 import TkinterDnD, DND_FILES
+            # 延遲導入 tkinterdnd2，僅在需要時導入
+            from tkinterdnd2 import TkinterDnD
             root = TkinterDnD.Tk()
             print("成功使用 TkinterDnD2 初始化根視窗")
         except Exception as e:
@@ -1838,8 +2173,18 @@ def main():
         app = TextCorrectionTool(root)
         root.mainloop()
     except Exception as e:
-        print(f"程式執行錯誤: {str(e)}")
-        messagebox.showerror("錯誤", f"程式執行錯誤: {str(e)}")
+        error_msg = f"程式執行時發生嚴重錯誤: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg)
+        # 嘗試記錄錯誤
+        try:
+            logging.error(error_msg)
+        except Exception as log_e:
+            print(f"記錄錯誤時也發生錯誤: {log_e}")
+        # 嘗試顯示錯誤訊息框
+        try:
+            messagebox.showerror("嚴重錯誤", f"程式執行時發生嚴重錯誤: {str(e)}\n請查看日誌檔案獲取詳細信息。")
+        except Exception as msg_e:
+             print(f"顯示錯誤訊息框時也發生錯誤: {msg_e}")
 
 if __name__ == "__main__":
     main()
