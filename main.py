@@ -48,8 +48,12 @@ class TextCorrectionTool:
         # 載入詞彙保護表
         self.protected_words = self.load_protected_words()
 
-        # 載入設定
+        # 載入設定 (包含自訂快捷字)
         self.settings = self.load_settings()
+        # 確保 custom_shortcuts 存在且是列表
+        if "custom_shortcuts" not in self.settings or not isinstance(self.settings["custom_shortcuts"], list):
+             self.settings["custom_shortcuts"] = []
+
 
         # 初始化OpenCC轉換器
         try:
@@ -175,16 +179,20 @@ class TextCorrectionTool:
         self.correct_button = tk.Button(self.toolbar_top_frame, text="文字修正", command=self.correct_text)
         self.correct_button.pack(side=tk.LEFT, padx=2, pady=2)
 
-        self.add_shortcut_button = tk.Button(self.toolbar_top_frame, text="新增快捷字", command=self.add_shortcut) # Placeholder command
+        self.add_shortcut_button = tk.Button(self.toolbar_top_frame, text="新增快捷字", command=self.add_shortcut)
         self.add_shortcut_button.pack(side=tk.LEFT, padx=2, pady=2)
+
+        # 新增：刪除快捷字按鈕
+        self.delete_shortcut_button = tk.Button(self.toolbar_top_frame, text="刪除快捷字", command=self.delete_shortcut)
+        self.delete_shortcut_button.pack(side=tk.LEFT, padx=2, pady=2)
 
         # 工具欄下層
         self.toolbar_bottom_frame = tk.Frame(self.toolbar_main_frame)
         self.toolbar_bottom_frame.pack(side=tk.TOP, fill=tk.X)
 
-        # 工具欄按鈕 (下層 - 快捷字/符號)
-        shortcuts = ["，", "。", "「」", "『』", "民國(下同)", "新臺幣(下同)"]
-        for sc in shortcuts:
+        # 工具欄按鈕 (下層 - 預設快捷字/符號)
+        default_shortcuts = ["，", "。", "「」", "『』", "民國(下同)", "新臺幣(下同)"]
+        for sc in default_shortcuts:
             # Handle quotes needing cursor placement inside
             if sc == "「」" or sc == "『』":
                 btn = tk.Button(self.toolbar_bottom_frame, text=sc,
@@ -193,6 +201,9 @@ class TextCorrectionTool:
                 btn = tk.Button(self.toolbar_bottom_frame, text=sc,
                                 command=lambda s=sc: self.insert_text_at_cursor(s))
             btn.pack(side=tk.LEFT, padx=2, pady=2)
+
+        # 新增：載入並顯示自訂快捷字按鈕
+        self.load_custom_shortcut_buttons()
 
 
         # --- 圖片顯示區域框架 (Pack at the bottom) ---
@@ -237,9 +248,10 @@ class TextCorrectionTool:
         y_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # 文字處理區域 - 啟用 undo
+        # 修改：使用 spacing1 控制段落內行距
         self.text_area = tk.Text(text_frame,
                                font=(self.settings["font_family"], self.settings["font_size"]),
-                               spacing3=self.settings["line_spacing"],
+                               spacing1=self.settings["line_spacing_within"], # 使用 spacing1
                                wrap=tk.WORD,
                                undo=True, # 啟用 Undo/Redo
                                yscrollcommand=y_scrollbar.set)
@@ -270,48 +282,95 @@ class TextCorrectionTool:
         except tk.TclError:
             self.status_bar.config(text="沒有可還原的操作")
 
- # --- 修改：實作 add_shortcut ---
     def add_shortcut(self):
-        """新增快捷字: 跳出輸入視窗，將輸入文字變成新按鈕加到工具欄下層"""
+        """新增快捷字: 跳出輸入視窗，將輸入文字變成新按鈕加到工具欄下層，並儲存到設定檔"""
         shortcut_text = simpledialog.askstring(
             "新增快捷字",
             "請輸入要新增的快捷字:",
-            parent=self.root  # Make the dialog modal to the main window
+            parent=self.root
         )
 
-        if shortcut_text:  # Check if the user entered text (didn't cancel)
-            shortcut_text = shortcut_text.strip() # Remove leading/trailing whitespace
-            if shortcut_text: # Check again after stripping to ensure it's not just whitespace
+        if shortcut_text:
+            shortcut_text = shortcut_text.strip()
+            if shortcut_text:
+                # 檢查是否已存在（避免重複添加完全相同的按鈕）
+                if shortcut_text in self.settings.get("custom_shortcuts", []):
+                     messagebox.showwarning("提示", f"快捷字 '{shortcut_text}' 已經存在。", parent=self.root)
+                     return
+
                 try:
-                    # --- Create the new button ---
-                    # IMPORTANT: Use lambda s=shortcut_text: ...
-                    # This captures the *current* value of shortcut_text for this specific button's command.
-                    # If you just used lambda: self.insert_text_at_cursor(shortcut_text),
-                    # all dynamically created buttons would insert the *last* added shortcut text.
-                    new_button = tk.Button(
-                        self.toolbar_bottom_frame,
-                        text=shortcut_text,
-                        command=lambda s=shortcut_text: self.insert_text_at_cursor(s)
-                    )
+                    # 添加到設定檔
+                    self.settings.setdefault("custom_shortcuts", []).append(shortcut_text)
+                    self.save_settings()
 
-                    # --- Pack the new button ---
-                    # It will automatically appear to the right of existing buttons packed with side=tk.LEFT
-                    new_button.pack(side=tk.LEFT, padx=2, pady=2)
-
-                    # --- Apply the current theme to the new button ---
-                    # We need to ensure new buttons also follow the theme.
-                    self.apply_theme_to_widget(new_button) # 使用輔助函數套用主題
+                    # 創建並顯示新按鈕
+                    self._create_shortcut_button(shortcut_text)
 
                     self.status_bar.config(text=f"已新增快捷字: {shortcut_text}")
                     print(f"新增快捷字: {shortcut_text}")
 
                 except Exception as e:
                     error_msg = f"無法新增快捷按鈕: {str(e)}"
-                    self.log_error("Shortcut Error", error_msg, traceback.format_exc()) # 使用您的錯誤記錄
+                    self.log_error("Shortcut Error", error_msg, traceback.format_exc())
             else:
-                 # User entered only whitespace
                  messagebox.showwarning("提示", "快捷字不能為空或僅包含空白字符。", parent=self.root)
-        # else: User cancelled the dialog, do nothing.
+
+    def delete_shortcut(self):
+        """刪除工具欄下層最右側的自訂快捷字按鈕及其設定"""
+        custom_buttons = [widget for widget in self.toolbar_bottom_frame.winfo_children()
+                          if isinstance(widget, tk.Button) and widget.cget("text") in self.settings.get("custom_shortcuts", [])]
+
+        if not custom_buttons:
+            messagebox.showinfo("提示", "沒有可刪除的自訂快捷字。", parent=self.root)
+            return
+
+        # 找到最右側（最後一個 pack 的）自訂按鈕
+        button_to_delete = custom_buttons[-1]
+        shortcut_text = button_to_delete.cget("text")
+
+        try:
+            # 從設定中移除
+            if shortcut_text in self.settings.get("custom_shortcuts", []):
+                self.settings["custom_shortcuts"].remove(shortcut_text)
+                self.save_settings()
+
+            # 從 UI 中移除
+            button_to_delete.destroy()
+
+            self.status_bar.config(text=f"已刪除快捷字: {shortcut_text}")
+            print(f"刪除快捷字: {shortcut_text}")
+
+        except Exception as e:
+            error_msg = f"無法刪除快捷按鈕: {str(e)}"
+            self.log_error("Shortcut Error", error_msg, traceback.format_exc())
+
+    def _create_shortcut_button(self, shortcut_text):
+        """內部函數：創建單個快捷字按鈕並應用主題"""
+        try:
+            new_button = tk.Button(
+                self.toolbar_bottom_frame,
+                text=shortcut_text,
+                command=lambda s=shortcut_text: self.insert_text_at_cursor(s)
+            )
+            new_button.pack(side=tk.LEFT, padx=2, pady=2)
+            self.apply_theme_to_widget(new_button) # 應用當前主題
+        except Exception as e:
+             print(f"創建快捷按鈕 '{shortcut_text}' 時出錯: {e}")
+
+
+    def load_custom_shortcut_buttons(self):
+        """從設定檔載入並創建自訂快捷字按鈕"""
+        # 清除現有的自訂按鈕（如果需要重新載入）
+        # for widget in self.toolbar_bottom_frame.winfo_children():
+        #     if widget.cget("text") in self.settings.get("custom_shortcuts", []):
+        #         widget.destroy()
+        # 通常在初始化時調用一次即可，除非有動態重載需求
+
+        custom_shortcuts = self.settings.get("custom_shortcuts", [])
+        print(f"載入自訂快捷字: {custom_shortcuts}")
+        for sc in custom_shortcuts:
+            self._create_shortcut_button(sc)
+
 
     # --- 新增：套用主題到單一元件的輔助函數 ---
     def apply_theme_to_widget(self, widget):
@@ -321,9 +380,9 @@ class TextCorrectionTool:
 
          # Determine colors based on theme
          if self.settings["dark_mode"]:
-             bg_color = "#2b2b2b" # 背景色
+             bg_color = "#333333" # 背景色 (深灰)
              fg_color = "white" # 前景色 (文字)
-             button_bg = "#3c3f41" # 按鈕背景
+             button_bg = "#555555" # 按鈕背景 (稍淺灰)
              button_fg = "white" # 按鈕文字
              # Add more specific colors if needed
          else:
@@ -348,7 +407,7 @@ class TextCorrectionTool:
                  widget.configure(bg=bg_color) # Frame 本身使用主背景色
              elif widget_type == 'Canvas': # 例如圖片區的 Canvas
                  # Canvas 的背景可能需要特別設定 (例如淺色模式下的白色)
-                 canvas_bg = "white" if not self.settings["dark_mode"] else "#2b2b2b"
+                 canvas_bg = "white" if not self.settings["dark_mode"] else "#333333" # 深灰
                  widget.configure(bg=canvas_bg)
              # Add other common widget types if necessary
          except tk.TclError:
@@ -359,23 +418,23 @@ class TextCorrectionTool:
     def apply_theme(self):
         """應用主題設定"""
         if self.settings["dark_mode"]:
-            # 深色模式
-            bg_color = "#2b2b2b"
-            fg_color = "white"
-            text_bg = "#2b2b2b" # 文字區域背景
-            text_fg = "white" # 文字區域文字
-            button_bg = "#3c3f41"
-            button_fg = "white"
-            canvas_bg = "#2b2b2b" # Canvas 背景 (圖片區)
-            toolbar_bg = "#3c3f41" # 工具列背景
-            img_container_bg = "#2b2b2b" # 圖片容器 Frame 背景
-            cursor_color = "white" # 文字區域游標顏色
-            notebook_bg = "#2b2b2b" # Notebook 背景
-            tab_bg = "#3c3f41" # Tab 背景
-            selected_tab_bg = "#4f5254" # 選中 Tab 背景 (可調整)
+            # 深色模式 (使用深灰色)
+            bg_color = "#333333"         # 主背景色 (深灰)
+            fg_color = "white"           # 前景色 (文字)
+            text_bg = "#333333"          # 文字區域背景
+            text_fg = "white"           # 文字區域文字
+            button_bg = "#555555"        # 按鈕背景 (稍淺灰)
+            button_fg = "white"           # 按鈕文字
+            canvas_bg = "#333333"        # Canvas 背景 (圖片區)
+            toolbar_bg = "#404040"       # 工具列背景 (中灰)
+            img_container_bg = "#333333" # 圖片容器 Frame 背景
+            cursor_color = "white"        # 文字區域游標顏色 (確保為白色)
+            notebook_bg = "#333333"      # Notebook 背景
+            tab_bg = "#404040"           # 未選中 Tab 背景
+            selected_tab_bg = "#555555"   # 選中 Tab 背景
         else:
             # 淺色模式 (使用系統預設)
-            bg_color = "SystemButtonFace"
+            bg_color = "SystemButtonFace" # 主背景色
             fg_color = "black"
             text_bg = "white"
             text_fg = "black"
@@ -395,7 +454,7 @@ class TextCorrectionTool:
 
         # 應用主題到文字區域
         # 使用 insertbackground 讓游標在深色模式下可見
-        self.text_area.configure(bg=text_bg, fg=text_fg, insertbackground=cursor_color)
+        self.text_area.configure(bg=text_bg, fg=text_fg, insertbackground=cursor_color) # Ensure cursor color is applied
 
         # 應用主題到圖片區域 Frame
         self.image_frame.configure(bg=bg_color)
@@ -632,48 +691,12 @@ class TextCorrectionTool:
                 messagebox.showerror("錯誤", f"不支援的檔案格式: {file_path}\n僅支援 .doc 和 .docx 格式。")
                 return
 
-            # 更新狀態欄
-            self.status_bar.config(text=f"正在處理檔案: {os.path.basename(file_path)}")
+            # 顯示正在處理的提示
+            self.status_bar.config(text=f"正在解析檔案: {os.path.basename(file_path)}...")
+            self.root.update_idletasks()  # 立即更新UI以顯示狀態
 
-            # 嘗試處理Word檔案
-            try:
-                # 先嘗試檢查文件是否加密
-                try:
-                    with open(file_path, 'rb') as f:
-                        try:
-                            office_file = msoffcrypto.OfficeFile(f)
-                            if office_file.is_encrypted():
-                                print("檔案已加密，需要密碼")
-                                # 文件已加密，直接調用密碼處理方法
-                                self.handle_password_protected_file(file_path)
-                                return
-                        except Exception as e:
-                            print(f"檢查加密狀態時發生錯誤: {str(e)}")
-                            # 繼續嘗試普通處理
-                except Exception as e:
-                    print(f"開啟檔案時發生錯誤: {str(e)}")
-                            # 繼續嘗試普通處理
-                except Exception as e:
-                    print(f"開啟檔案時發生錯誤: {str(e)}")
-                    # 繼續嘗試普通處理
-
-                # --- 修改：調用新的處理邏輯 ---
-                self.load_and_display_word_content(file_path)
-
-            except Exception as e:
-                # 檢查是否為加密文件的錯誤
-                error_str = str(e).lower()
-                if self._is_password_error(error_str):
-                    # 可能是加密文件，嘗試使用密碼處理
-                    print(f"檢測到加密錯誤: {error_str}")
-                    self.handle_password_protected_file(file_path)
-                else:
-                    # 其他錯誤，顯示錯誤訊息
-                    error_msg = f"處理檔案時發生錯誤: {str(e)}\n{traceback.format_exc()}"
-                    print(error_msg)
-                    logging.error(error_msg) # 記錄錯誤
-                    messagebox.showerror("錯誤", f"處理檔案時發生錯誤: {str(e)}")
-                    self.status_bar.config(text=f"處理檔案時發生錯誤") # 簡化狀態欄訊息
+            # 處理Word檔案
+            self.load_and_display_word_content(file_path)
 
         except Exception as e:
             error_msg = f"處理拖放檔案時發生嚴重錯誤: {str(e)}\n{traceback.format_exc()}"
@@ -690,8 +713,15 @@ class TextCorrectionTool:
             file_path: Word檔案路徑
             password: 檔案密碼（如果有的話）
         """
+        # 更新狀態欄和文字區域，顯示正在處理的提示
         self.status_bar.config(text=f"正在處理檔案: {os.path.basename(file_path)}...")
-        self.root.update_idletasks() # 更新UI以顯示狀態
+        
+        # 在文字區域顯示處理中的提示
+        if not password:  # 只有在初次處理時顯示，避免密碼重試時重複顯示
+            self.text_area.delete(1.0, tk.END)
+            self.text_area.insert(tk.END, "正在解析Word檔案，請稍候...")
+        
+        self.root.update_idletasks()  # 更新UI以顯示狀態和提示
 
         # 清空之前的圖片
         self.clear_images()
@@ -742,7 +772,6 @@ class TextCorrectionTool:
                     # 或者，我們可以在這裡重新解密一次專門用於提圖，但效率低
                     # **目前的 process_word_file_internal 結構會在解密後提取圖片，所以這裡可能不需要額外操作**
                     # **但需要確認 process_word_file_internal 的圖片提取邏輯是否正確觸發**
-                    # **修改 process_word_file_internal，使其在解密後調用 extract_images_from_docx**
                     pass # 假設 process_word_file_internal 已處理圖片提取
                 else:
                     # 對於無密碼文件，直接提取
@@ -785,7 +814,7 @@ class TextCorrectionTool:
             password: 檔案密碼（如果有的話）
 
         回傳:
-            檔案內容 (str) 或 None (如果失敗)
+            檔案內容
         """
         # 檢查檔案是否存在
         if not os.path.exists(file_path):
@@ -846,16 +875,6 @@ class TextCorrectionTool:
             # self.extract_images_from_docx(file_path) # 不在這裡提取，由上層調用
             return text
 
-    # process_word_file 函數現在被 load_and_display_word_content 和 process_word_file_internal 取代
-    # 可以刪除舊的 process_word_file 函數，或者保留它作為內部實現細節（但不直接從 UI 調用）
-    # 這裡選擇重命名舊函數為 internal，並讓 load_and_display_word_content 成為主要入口
-
-    # def process_word_file(self, file_path, password=None):
-    #     """(舊函數 - 不再直接使用) 處理Word檔案..."""
-    #     # ... 舊的實現 ...
-    #     pass
-
-
     def _process_unencrypted_file(self, file_path):
         """處理未加密的Word檔案
 
@@ -867,101 +886,15 @@ class TextCorrectionTool:
         """
         try:
             # 嘗試使用 docx2txt 提取文字
-            try:
-                import docx2txt
-                text = docx2txt.process(file_path)
-                print("使用 docx2txt 成功提取文字")
-                return text
-            except Exception as docx2txt_error:
-                print(f"docx2txt 失敗: {docx2txt_error}，嘗試使用 python-docx")
-                # 如果 docx2txt 失敗，嘗試使用 python-docx
-                try:
-                    import docx
-                    doc = docx.Document(file_path)
-                    text = "\n".join([para.text for para in doc.paragraphs])
-                    print("使用 python-docx 成功提取文字")
-                    return text
-                except Exception as docx_error:
-                    print(f"python-docx 失敗: {docx_error}，嘗試使用 COM")
-                    # 如果 python-docx 也失敗，嘗試使用 COM 方法
-                    text = self.parse_word_document_com(file_path)
-                    if text:
-                        print("使用 COM 成功提取文字")
-                        return text
-                    else:
-                        raise Exception("所有提取方法都失敗")
+            return docx2txt.process(file_path)
         except Exception as e:
-            # 檢查是否為加密文件的錯誤
-            error_str = str(e).lower()
-            if self._is_password_error(error_str):
-                # 可能是加密文件，嘗試使用密碼處理
-                print(f"檢測到加密錯誤: {error_str}")
-                self.handle_password_protected_file(file_path)
-            else:
-                # 其他錯誤，顯示錯誤訊息
-                messagebox.showerror("錯誤", f"處理檔案時發生錯誤: {str(e)}")
-                self.status_bar.config(text=f"處理檔案時發生錯誤: {str(e)}")
-            raise e  # 重新拋出異常，讓上層函數知道處理失敗
-
-    def process_word_file(self, file_path, password=None):
-        """處理Word檔案
-
-        參數:
-            file_path: Word檔案路徑
-            password: 檔案密碼（如果有的話）
-
-        回傳:
-            檔案內容
-        """
-        # 檢查檔案是否存在
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"找不到檔案: {file_path}")
-
-        # 清空之前的圖片
-        self.clear_images()
-
-        # 如果提供了密碼，嘗試解密檔案
-        if password:
+            # 如果 docx2txt 失敗，嘗試使用 python-docx
             try:
-                # 創建一個臨時檔案來存儲解密後的內容
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as temp_file:
-                    temp_path = temp_file.name
-
-                # 打開加密檔案
-                with open(file_path, 'rb') as f:
-                    file_bytes = f.read()
-
-                # 創建一個 BytesIO 對象
-                file_stream = BytesIO(file_bytes)
-
-                # 使用 msoffcrypto 解密
-                ms_file = msoffcrypto.OfficeFile(file_stream)
-                ms_file.load_key(password=password)
-
-                with open(temp_path, 'wb') as f:
-                    ms_file.decrypt(f)
-
-                # 處理解密後的檔案
-                text = self._process_unencrypted_file(temp_path)
-
-                # 提取圖片
-                self.extract_images_from_docx(temp_path)
-
-                # 刪除臨時檔案
-                os.unlink(temp_path)
-
-                return text
-            except Exception as e:
-                # 如果解密失敗，拋出異常
-                raise Exception(f"解密失敗: {str(e)}")
-        else:
-            # 處理未加密的檔案
-            text = self._process_unencrypted_file(file_path)
-
-            # 提取圖片
-            self.extract_images_from_docx(file_path)
-
-            return text
+                doc = Document(file_path)
+                return self._extract_text_from_document(doc)
+            except Exception as e2:
+                # 如果都失敗了，拋出異常
+                raise Exception(f"無法處理Word檔案: {str(e)}, {str(e2)}")
 
     def _is_password_error(self, error_message):
         """檢查錯誤訊息是否與密碼保護相關
@@ -1155,13 +1088,23 @@ class TextCorrectionTool:
             os.makedirs(self.download_path, exist_ok=True)
 
             # 下載所有圖片
+            timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S') # Get current timestamp
             for i, image in enumerate(self.images):
-                # 生成檔案名稱
-                file_name = f"image_{i + 1}.png"
+                # 生成檔案名稱 (加入時間戳)
+                file_name = f"image_{timestamp}_{i + 1}.png"
                 file_path = os.path.join(self.download_path, file_name)
 
-                # 保存圖片
-                image.save(file_path)
+                # 保存圖片 (確保使用 PNG 格式保存，如果原始格式不同)
+                try:
+                    if image.format == 'PNG':
+                         image.save(file_path)
+                    else:
+                         # 轉換為 RGBA 以確保透明度被正確處理 (如果有的話)
+                         image.convert("RGBA").save(file_path, "PNG")
+                except Exception as save_err:
+                     print(f"儲存圖片 {file_name} 時出錯: {save_err}")
+                     # 可以選擇跳過此圖片或顯示錯誤
+                     messagebox.showwarning("儲存錯誤", f"無法儲存圖片 {file_name}:\n{save_err}")
 
             # 更新狀態欄
             self.status_bar.config(text=f"已下載 {len(self.images)} 張圖片到 {self.download_path}")
@@ -1189,7 +1132,10 @@ class TextCorrectionTool:
 
             if file_path:
                 print(f"選擇的檔案: {file_path}")
-                # --- 修改：調用新的處理邏輯 ---
+                # 顯示正在處理的提示
+                self.status_bar.config(text=f"正在解析檔案: {os.path.basename(file_path)}...")
+                self.root.update_idletasks()  # 立即更新UI以顯示狀態
+                # 處理Word檔案
                 self.load_and_display_word_content(file_path)
 
         except Exception as e:
@@ -1553,6 +1499,56 @@ class TextCorrectionTool:
         settings_window.transient(self.root)  # 設為主視窗的子視窗
         settings_window.grab_set()  # 模態視窗
 
+        # 段落內行距選擇    
+        tk.Label(frame, text="段落內行距:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        spacing_within_var = tk.IntVar(value=self.settings.get("line_spacing_within", 0))
+        # 允許 0 到 10 的間距
+        spacing_within_spinbox = ttk.Spinbox(frame, from_=0, to=10, textvariable=spacing_within_var, width=5)
+        spacing_within_spinbox.grid(row=3, column=1, sticky=tk.W, pady=5)
+
+        # 設定更新預覽的回調
+        font_var.trace_add("write", update_preview)
+        size_var.trace_add("write", update_preview)
+        spacing_var.trace_add("write", update_preview)
+        spacing_within_var.trace_add("write", update_preview)
+
+        def update_preview(*args):
+            font_family = font_var.get()
+            font_size = size_var.get()
+            line_spacing = spacing_var.get()
+            line_spacing_within = spacing_within_var.get()
+            try:
+                # 更新字體和行距
+                preview_text.configure(
+                    font=(font_family, font_size), 
+                    spacing3=line_spacing,
+                    spacing1=line_spacing_within
+                )
+            except tk.TclError as e:
+                # 處理可能的字體錯誤
+                print(f"預覽錯誤: {e}")
+                preview_text.configure(
+                    font=("Arial", font_size), 
+                    spacing3=line_spacing,
+                    spacing1=line_spacing_within
+                )  # Fallback font
+
+        spacing_within_var.trace_add("write", update_preview)
+
+        def save_settings():
+            self.settings["font_family"] = font_var.get()
+            self.settings["font_size"] = size_var.get()
+            self.settings["line_spacing"] = spacing_var.get()
+            self.settings["line_spacing_within"] = spacing_within_var.get()
+            self.save_settings()
+            # 應用字體和行距到主文字區域
+            self.text_area.configure(
+                font=(self.settings["font_family"], self.settings["font_size"]),
+                spacing3=self.settings["line_spacing"],
+                spacing1=self.settings["line_spacing_within"]
+            )
+            settings_window.destroy()
+
         # 建立框架
         frame = tk.Frame(settings_window, padx=20, pady=20)
         frame.pack(fill=tk.BOTH, expand=True)
@@ -1638,11 +1634,12 @@ class TextCorrectionTool:
             設定字典
         """
         default_settings = {
-            "font_family": "新細明體",
-            "font_size": 12,
-            "line_spacing": 3, # 新增：預設行距 (段落下間距)
-            "dark_mode": False
-        }
+    "font_family": "新細明體",
+    "font_size": 12,
+    "line_spacing": 3, # 預設行距 (段落下間距)
+    "line_spacing_within": 0, # 預設段落內行距
+    "dark_mode": False
+}
 
         try:
             # 檢查檔案是否存在
@@ -1688,14 +1685,15 @@ class TextCorrectionTool:
         """應用主題設定"""
         if self.settings["dark_mode"]:
             # 深色模式
-            bg_color = "#2b2b2b"
+            bg_color = "#333333"  # 改為深灰色而非黑色 (#2b2b2b)
             fg_color = "white"
-            text_bg = "#2b2b2b"
+            text_bg = "#333333"  # 文字區域背景
             text_fg = "white"
             button_bg = "#3c3f41"
             button_fg = "white"
-            canvas_bg = "#2b2b2b"
-            toolbar_bg = "#3c3f41" # Toolbar background
+            canvas_bg = "#333333"  # 畫布背景
+            toolbar_bg = "#3c3f41"  # 工具列背景
+            cursor_color = "white"  # 游標顏色設為白色，在深色背景下更容易看見
         else:
             # 淺色模式
             bg_color = "white"
@@ -1705,18 +1703,24 @@ class TextCorrectionTool:
             button_bg = "#f0f0f0"
             button_fg = "black"
             canvas_bg = "white"
-            toolbar_bg = "#f0f0f0" # Toolbar background
+            toolbar_bg = "#f0f0f0"  # 工具列背景
+            cursor_color = "black"  # 游標顏色設為黑色，在淺色背景下更容易看見
 
         # 應用主題到主視窗
         self.root.configure(bg=bg_color)
 
         # 應用主題到文字區域
-        self.text_area.configure(bg=text_bg, fg=text_fg)
+        # 使用 insertbackground 讓游標在深色模式下可見
+        self.text_area.configure(bg=text_bg, fg=text_fg, insertbackground=cursor_color)
 
-        # 應用主題到圖片區域
-        self.image_frame.configure(bg=bg_color)
-        self.image_container.configure(bg=bg_color)
-        self.image_canvas.configure(bg=canvas_bg)
+        # 應用主題到文字區域
+        self.text_area.configure(
+            bg=text_bg, 
+            fg=text_fg, 
+            insertbackground=cursor_color,
+            spacing1=self.settings.get("line_spacing_within", 0)
+        )
+
 
         # 應用主題到圖片下載按鈕框架及其按鈕
         for widget in self.image_frame.winfo_children():
@@ -2180,11 +2184,52 @@ def main():
             logging.error(error_msg)
         except Exception as log_e:
             print(f"記錄錯誤時也發生錯誤: {log_e}")
-        # 嘗試顯示錯誤訊息框
+        # 嘗試顯示完整錯誤訊息框
         try:
-            messagebox.showerror("嚴重錯誤", f"程式執行時發生嚴重錯誤: {str(e)}\n請查看日誌檔案獲取詳細信息。")
+            # 創建一個新的Tk窗口來顯示錯誤
+            error_root = tk.Tk()
+            error_root.title("嚴重錯誤")
+            error_root.geometry("800x600")
+            
+            # 創建一個可滾動的文本區域來顯示完整錯誤
+            frame = tk.Frame(error_root)
+            frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            # 添加錯誤圖標和標題
+            error_frame = tk.Frame(frame)
+            error_frame.pack(fill=tk.X, pady=(0, 10))
+            
+            # 使用Unicode字符作為錯誤圖標
+            tk.Label(error_frame, text="⚠️", font=("Arial", 24), fg="red").pack(side=tk.LEFT, padx=(0, 10))
+            tk.Label(error_frame, text="程式執行時發生嚴重錯誤", font=("Arial", 14, "bold")).pack(side=tk.LEFT)
+            
+            # 創建可滾動文本區域
+            text_frame = tk.Frame(frame)
+            text_frame.pack(fill=tk.BOTH, expand=True)
+            
+            scrollbar = tk.Scrollbar(text_frame)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            error_text = tk.Text(text_frame, wrap=tk.WORD, yscrollcommand=scrollbar.set)
+            error_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            scrollbar.config(command=error_text.yview)
+            
+            # 插入錯誤信息
+            error_text.insert(tk.END, f"錯誤信息: {str(e)}\n\n")
+            error_text.insert(tk.END, "詳細堆疊追蹤:\n")
+            error_text.insert(tk.END, traceback.format_exc())
+            
+            # 添加關閉按鈕
+            tk.Button(frame, text="關閉", command=error_root.destroy, width=15).pack(pady=10)
+            
+            error_root.mainloop()
         except Exception as msg_e:
-             print(f"顯示錯誤訊息框時也發生錯誤: {msg_e}")
+            print(f"顯示錯誤訊息框時也發生錯誤: {msg_e}")
+            # 最後嘗試使用基本的messagebox
+            try:
+                messagebox.showerror("嚴重錯誤", f"程式執行時發生嚴重錯誤:\n{str(e)}\n\n{traceback.format_exc()[:500]}...\n(錯誤訊息已截斷，完整訊息請查看控制台)")
+            except:
+                pass
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,52 @@
+2025-04-02 13:14:42 - ERROR - 程式執行時發生嚴重錯誤: 'line_spacing_within'
+Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\main.py", line 2122, in main
+    app = TextCorrectionTool(root)
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\main.py", line 66, in __init__
+    self.create_widgets()  # 創建UI元件
+    ^^^^^^^^^^^^^^^^^^^^^
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\main.py", line 254, in create_widgets
+    spacing1=self.settings["line_spacing_within"], # 使用 spacing1
+             ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'line_spacing_within'
+
+2025-04-02 13:14:52 - ERROR - 程式執行時發生嚴重錯誤: 'line_spacing_within'
+Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\main.py", line 2122, in main
+    app = TextCorrectionTool(root)
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\main.py", line 66, in __init__
+    self.create_widgets()  # 創建UI元件
+    ^^^^^^^^^^^^^^^^^^^^^
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\main.py", line 254, in create_widgets
+    spacing1=self.settings["line_spacing_within"], # 使用 spacing1
+             ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'line_spacing_within'
+
+2025-04-02 13:17:56 - ERROR - 程式執行時發生嚴重錯誤: 'line_spacing_within'
+Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\main.py", line 2122, in main
+    app = TextCorrectionTool(root)
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\main.py", line 66, in __init__
+    self.create_widgets()  # 創建UI元件
+    ^^^^^^^^^^^^^^^^^^^^^
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\main.py", line 254, in create_widgets
+    spacing1=self.settings["line_spacing_within"], # 使用 spacing1
+             ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'line_spacing_within'
+
+2025-04-02 13:18:06 - ERROR - 程式執行時發生嚴重錯誤: 'line_spacing_within'
+Traceback (most recent call last):
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\main.py", line 2122, in main
+    app = TextCorrectionTool(root)
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\main.py", line 66, in __init__
+    self.create_widgets()  # 創建UI元件
+    ^^^^^^^^^^^^^^^^^^^^^
+  File "y:\02_程式\10_program\win11_windsurf_project\editertool_version07\main.py", line 254, in create_widgets
+    spacing1=self.settings["line_spacing_within"], # 使用 spacing1
+             ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'line_spacing_within'
+
